@@ -1,0 +1,366 @@
+{
+    "info": {
+        "_postman_id": "630ab377-9fbd-4406-8694-49c862227ddc",
+        "name": "Score",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+        "description": ""
+    },
+    "item": [
+        {
+            "name": "Score add country",
+            "request": {
+                "method": "POST",
+                "url": {
+                    "raw": "http://127.0.0.1:8000/score/add-country/",
+                    "path": [
+                        "score",
+                        "add-country"
+                    ],
+                    "protocol": "http",
+                    "host": [
+                        "127",
+                        "0",
+                        "0",
+                        "1"
+                    ],
+                    "port": "8000"
+                },
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ3Mzk4NDM2LCJpYXQiOjE3NDczOTEyMzYsImp0aSI6ImIwNDZlNTBjZjNjMzRkMTVhMzg0NWIwN2IyMWUwZWQyIiwidXNlcl9pZCI6MX0.SR_ue6t-bFVao7NN-c3m9NhhQ3iMAKc3qkyV3LU8-wA"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
+                    },
+                    "raw": "{\n  \"name\": \"Pakistan\",\n  \"email\": \"just_pakistan@pakistan.org\",\n  \"country_code\": \"PAK\",\n  \"phone_code\": \"+92\"\n}"
+                }
+            }
+        },
+        {
+            "name": "New subscription",
+            "request": {
+                "method": "POST",
+                "url": {
+                    "raw": "http://127.0.0.1:8000/score/subscribe/",
+                    "path": [
+                        "score",
+                        "subscribe"
+                    ],
+                    "protocol": "http",
+                    "host": [
+                        "127",
+                        "0",
+                        "0",
+                        "1"
+                    ],
+                    "port": "8000"
+                },
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ3Mzk2MzYyLCJpYXQiOjE3NDczODkxNjIsImp0aSI6IjdhNTNhYmZhMzg5NjQ5NzFhNTMzZDY3ZWMxOGUzYTgwIiwidXNlcl9pZCI6MX0.YFpkok_DjpgZl4h3GCANXQqjD2Xyl35QN45HgNWIGgU"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
+                    },
+                    "raw": "{\n  \"name\": \"Pakistan\",\n  \"plan\": \"monthly\"\n}"
+                }
+            }
+        },
+        {
+            "name": "Score login",
+            "request": {
+                "method": "POST",
+                "url": {
+                    "raw": "http://127.0.0.1:8000/score/login/",
+                    "path": [
+                        "score",
+                        "login"
+                    ],
+                    "protocol": "http",
+                    "host": [
+                        "127",
+                        "0",
+                        "0",
+                        "1"
+                    ],
+                    "port": "8000"
+                },
+                "body": {
+                    "mode": "raw",
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
+                    },
+                    "raw": "{\n  \"email\": \"root@fake.com\",\n  \"password\": \"root2025\"\n}"
+                }
+            }
+        },
+        {
+            "name": "Country data",
+            "request": {
+                "method": "GET",
+                "url": {
+                    "raw": "http://127.0.0.1:8000/score/country/Pakistan/",
+                    "path": [
+                        "score",
+                        "country",
+                        "Pakistan"
+                    ],
+                    "protocol": "http",
+                    "host": [
+                        "127",
+                        "0",
+                        "0",
+                        "1"
+                    ],
+                    "port": "8000"
+                },
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ3MjE4NTQ4LCJpYXQiOjE3NDcyMTEzNDgsImp0aSI6IjgzNmEzNmNlYjYxYzQ0ODViOGJjMjY5N2FhMjc3MGVkIiwidXNlcl9pZCI6Nn0.bx3JUjrtciBbYu8JhxMfb8DGC7-SB-mpMAlQXvtoORQ"
+                    }
+                ]
+            }
+        },
+        {
+            "name": "Connexion front office",
+            "request": {
+                "method": "POST",
+                "url": {
+                    "raw": "http://127.0.0.1:8000/score/login/",
+                    "path": [
+                        "score",
+                        "login"
+                    ],
+                    "protocol": "http",
+                    "host": [
+                        "127",
+                        "0",
+                        "0",
+                        "1"
+                    ],
+                    "port": "8000"
+                },
+                "body": {
+                    "mode": "raw",
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
+                    },
+                    "raw": "{\n  \"email\": \"islamabad@office.com\",\n  \"password\": \"dUpyimg20ZsgYnfDD5-X\"\n}"
+                }
+            }
+        },
+        {
+            "name": "Connexion de pays",
+            "request": {
+                "method": "POST",
+                "url": {
+                    "raw": "http://127.0.0.1:8000/score/login/",
+                    "path": [
+                        "score",
+                        "login"
+                    ],
+                    "protocol": "http",
+                    "host": [
+                        "127",
+                        "0",
+                        "0",
+                        "1"
+                    ],
+                    "port": "8000"
+                },
+                "body": {
+                    "mode": "raw",
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
+                    },
+                    "raw": "{\n  \"email\": \"islamabad@office.com\",\n  \"password\": \"dUpyimg20ZsgYnfDD5-X\"\n}"
+                }
+            }
+        },
+        {
+            "name": "Modification de mot de passe de front office",
+            "request": {
+                "method": "POST",
+                "url": {
+                    "raw": "http://127.0.0.1:8000/change-password/",
+                    "path": [
+                        "change-password"
+                    ],
+                    "protocol": "http",
+                    "host": [
+                        "127",
+                        "0",
+                        "0",
+                        "1"
+                    ],
+                    "port": "8000"
+                },
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ3Mzk5MDYyLCJpYXQiOjE3NDczOTE4NjIsImp0aSI6IjYwY2Q0OTcxNDczOTQ2ZjFiYTAxZmQzNDI0YTZhOGU0IiwidXNlcl9pZCI6M30.ofBkiQWKPEC25-3L1-ZPNXqhQWq_JpgJPf2ja2hSb38"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
+                    },
+                    "raw": "{\n  \"old_password\": \"dUpyimg20ZsgYnfDD5-X\",\n  \"new_password\": \"Islamabad2025\"\n}"
+                }
+            }
+        },
+        {
+            "name": "Connexion front office",
+            "request": {
+                "method": "POST",
+                "url": {
+                    "raw": "http://127.0.0.1:8000/score/login/",
+                    "path": [
+                        "score",
+                        "login"
+                    ],
+                    "protocol": "http",
+                    "host": [
+                        "127",
+                        "0",
+                        "0",
+                        "1"
+                    ],
+                    "port": "8000"
+                },
+                "body": {
+                    "mode": "raw",
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
+                    },
+                    "raw": "{\n  \"email\": \"islamabad@office.com\",\n  \"password\": \"dUpyimg20ZsgYnfDD5-X\"\n}"
+                }
+            }
+        },
+        {
+            "name": "Creation de front office",
+            "request": {
+                "method": "POST",
+                "url": {
+                    "raw": "http://127.0.0.1:8000/country/create-front-office/",
+                    "path": [
+                        "country",
+                        "create-front-office"
+                    ],
+                    "protocol": "http",
+                    "host": [
+                        "127",
+                        "0",
+                        "0",
+                        "1"
+                    ],
+                    "port": "8000"
+                },
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ3Mzk4NjU5LCJpYXQiOjE3NDczOTE0NTksImp0aSI6ImUzMWZiMzEyMWRhODQ2ZDZiMmIyYzAzYjE1ZWE1YzQwIiwidXNlcl9pZCI6Mn0.DbPfx2tS5ne309YWEiVH6TTkmzley89nt-ecwxIzzoI"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
+                    },
+                    "raw": "{\n  \"front_office_name\": \"Islamabad\",\n  \"username\": \"Islamabad\",\n  \"npi\": \"90283993234\",\n  \"phone\": \"559023399\",\n  \"email\": \"islamabad@office.com\",\n  \"localisation\": \"Islamabad Est rue sergent\"\n}"
+                }
+            }
+        },
+        {
+            "name": "Connexion de pays",
+            "request": {
+                "method": "POST",
+                "url": {
+                    "raw": "http://127.0.0.1:8000/score/login/",
+                    "path": [
+                        "score",
+                        "login"
+                    ],
+                    "protocol": "http",
+                    "host": [
+                        "127",
+                        "0",
+                        "0",
+                        "1"
+                    ],
+                    "port": "8000"
+                },
+                "body": {
+                    "mode": "raw",
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
+                    },
+                    "raw": "{\n  \"email\": \"islamabad@office.com\",\n  \"password\": \"dUpyimg20ZsgYnfDD5-X\"\n}"
+                }
+            }
+        },
+        {
+            "name": "Modification de mot de passe front office",
+            "request": {
+                "method": "POST",
+                "url": {
+                    "raw": "http://127.0.0.1:8000/change-password/",
+                    "path": [
+                        "change-password"
+                    ],
+                    "protocol": "http",
+                    "host": [
+                        "127",
+                        "0",
+                        "0",
+                        "1"
+                    ],
+                    "port": "8000"
+                },
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ3Mzk5MDYyLCJpYXQiOjE3NDczOTE4NjIsImp0aSI6IjYwY2Q0OTcxNDczOTQ2ZjFiYTAxZmQzNDI0YTZhOGU0IiwidXNlcl9pZCI6M30.ofBkiQWKPEC25-3L1-ZPNXqhQWq_JpgJPf2ja2hSb38"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
+                    },
+                    "raw": "{\n  \"old_password\": \"dUpyimg20ZsgYnfDD5-X\",\n  \"new_password\": \"Islamabad2025\"\n}"
+                }
+            }
+        }
+    ]
+}
