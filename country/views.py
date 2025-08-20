@@ -8,7 +8,7 @@ from users.models import ScoreUser
 from customer.models import Customer, Loan
 from country.models import FrontOffice, Huissier, Financial, AvailableZone
 from django.contrib.auth.hashers import make_password
-from score.permissions import IsCountry, IsPasswordChanged, IsFrontOffice, IsHuissier
+from score.permissions import IsCountry, IsPasswordChanged, IsFrontOffice, IsHuissier, IsHuissierOrFinancial
 from users.utils import generate_random_password
 from score.utils import generate_random_code, send_email
 # from django.core.cache import cache
@@ -210,7 +210,7 @@ class CreateConseillerFinancier(APIView):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class ConsultCustomerAccount(APIView):
-    permission_classes = [IsAuthenticated, IsHuissier]
+    permission_classes = [IsAuthenticated, IsHuissierOrFinancial]
 
     def post(self, request):
         npi = request.data.get("npi")
@@ -246,7 +246,7 @@ class ConsultCustomerAccount(APIView):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class CheckConsultationCode(APIView):
-    permission_classes = [IsAuthenticated, IsHuissier]
+    permission_classes = [IsAuthenticated, IsHuissierOrFinancial]
 
     def get(self, request: Request):
         code = request.GET.get('code')

@@ -31,5 +31,5 @@ def send_email(data: dict):
         message=data.get("message"),
         from_email=settings.EMAIL_HOST_USER,
         recipient_list=[data.get("to")],
-        fail_silently=True
+        fail_silently=False
     )

@@ -34,6 +34,12 @@ class IsPasswordChanged(BasePermission):
     def has_permission(self, request, view):
         return request.user.password_changed
 
+class IsHuissierOrFinancial(BasePermission):
+    message = "Only huissier or financial allowed"
+    def has_permission(self, request, view):
+        user = request.user
+        return user.role == 'huissier' or user.role == 'conseiller'
+
 # class HasValidSubscription(BasePermission):
 #     message = "No valid subscription available"
 
