@@ -2,7 +2,7 @@ from django.db import models
 
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
-from .manager import CustomUserManager
+from .managers import CustomUserManager
 from django.conf import settings
 
 
@@ -18,8 +18,8 @@ class ScoreUser(AbstractBaseUser, PermissionsMixin):
     role = models.CharField(max_length=20, choices=ROLE_CHOICES)
     email = models.EmailField(max_length=100, unique=True)
     username = models.CharField(max_length=100, unique=True)
-    password_changed = models.BooleanField(default=False)
     photo = models.ImageField(upload_to='profile_photos/', null=True,blank=True)
+
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
 

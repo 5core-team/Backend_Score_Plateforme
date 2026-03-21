@@ -63,6 +63,14 @@ class Login(APIView):
             "type_user": user.role
         }, status=200)
 
+class PasswordSetup():
+    pass
+
+class PasswordResetCode():
+    pass
+
+class ResetPassword():
+    pass
 
 @method_decorator(csrf_exempt, name='dispatch')
 class ChangePassword(APIView):

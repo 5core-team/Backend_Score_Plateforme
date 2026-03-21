@@ -2,24 +2,25 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf.urls.static import static
 from django.conf import settings
-from users.views import (
-    ChangePassword
+# from users.views import (
+#     ChangePassword
     # ListeClients,
     # AjouterClient,
     # CreerUtilisateur,
     # ListerUtilisateursParRole,
     # UpdateDeleteUtilisateur,  # ✅ ajout de la vue
     # accueil
-)
+# )
 
 
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path("score/", include("users.urls")),
+    path('auth/', include('accounts.urls')),
+    # path("score/", include("users.urls")),
     path("country/", include("country.urls")),
     path("customer/", include("customer.urls")),
-    path("change-password/", ChangePassword.as_view()),
+    # path("change-password/", ChangePassword.as_view()),
     # path('login/', Login.as_view()),
 #     path('clients/', ListeClients.as_view()),
 #     path('ajouter-client/', AjouterClient.as_view()),
