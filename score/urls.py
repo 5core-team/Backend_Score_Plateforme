@@ -17,9 +17,10 @@ from django.conf import settings
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('auth/', include('accounts.urls')),
+    path('geography/', include('geography.urls')),
+    path('staff/', include('staff.urls')),
+    path('customers/', include('customers.urls'))
     # path("score/", include("users.urls")),
-    path("country/", include("country.urls")),
-    path("customer/", include("customer.urls")),
     # path("change-password/", ChangePassword.as_view()),
     # path('login/', Login.as_view()),
 #     path('clients/', ListeClients.as_view()),

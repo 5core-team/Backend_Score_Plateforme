@@ -1,33 +1,15 @@
-from django.shortcuts import render
 from django.shortcuts import get_object_or_404
-from django.http import HttpResponse
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
-from dateutil.relativedelta import relativedelta
-from users.models import ScoreUser
-from users.serializers import ScoreUserSerializer
-from country.models import Country, Subscription
-from .utils import generate_random_password
 from rest_framework.request import Request
-from django.utils.timezone import now
-from country.serializers import CountrySerializer
-from .serializers import SubscriptionSerializer
-from score.permissions import IsScoreAdmin, IsHuissier
-from customer.models import Customer, Loan
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from .serializers import CustomerSerializer
-from customer.serializers import CustomerListSerializer
-
-from .serializers import LoanSerializer
-from django.core.mail import send_mail
-from datetime import date
 
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -38,6 +20,7 @@ from django.views.decorators.csrf import csrf_exempt
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 from .serializers import UserProfileSerializer
+from .models import ScoreUser
 
 @method_decorator(csrf_exempt, name='dispatch')
 class Login(APIView):

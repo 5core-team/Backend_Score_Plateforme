@@ -62,13 +62,14 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'users',
+    'accounts',
+    'staff',
+    'geography',
+    'customers',
     'corsheaders',
-    'country',
-    'customer',
 ]
 
-AUTH_USER_MODEL = 'users.ScoreUser'
+AUTH_USER_MODEL = 'accounts.ScoreUser'
 
 
 MIDDLEWARE = [
@@ -103,7 +104,7 @@ CORS_ALLOW_ALL_ORIGINS = True
 WSGI_APPLICATION = 'score.wsgi.application'
 
 # Media
-MEDIA_HOST = "http://localhost:8000"
+# MEDIA_HOST = "http://localhost:8000"
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases

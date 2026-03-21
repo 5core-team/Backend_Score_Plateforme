@@ -1,10 +1,10 @@
 from rest_framework import serializers
-from .models import User
+from .models import ScoreUser
 
 class UserProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
-        model = User
+        model = ScoreUser
         fields = [
             "role",
             "email",
