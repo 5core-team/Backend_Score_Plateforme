@@ -52,6 +52,9 @@ class PasswordSetup():
 class PasswordResetCode():
     pass
 
+class VerifyValidationCode():
+    pass
+
 class ResetPassword():
     pass
 
