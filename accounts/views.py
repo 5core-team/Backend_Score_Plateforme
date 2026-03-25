@@ -16,38 +16,78 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 
-
+from django.contrib.auth import authenticate
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 from .serializers import UserProfileSerializer
 from .models import ScoreUser
 
 @method_decorator(csrf_exempt, name='dispatch')
+# class Login(APIView):
+#     """
+#     Dette technique: Considérer les comptes non actifs
+#     """
+#     def post(self, request):
+#         email = request.data.get("email")
+#         password = request.data.get("password")
+
+#         if not email or not password:
+#             return Response({"Error_message": "incorrect email or password"}, status=400)
+
+#         user = get_object_or_404(ScoreUser, email=email)
+
+#         if not user.check_password(password):
+#             return Response({"Error_message": "Bad password"}, status=400)
+
+#         # Création des tokens
+#         refresh_token = RefreshToken.for_user(user)
+#         access_token = str(refresh_token.access_token)
+
+#         return Response({
+#             "access_token": access_token,
+#             "refresh_token": str(refresh_token),
+#             "type_user": user.role
+#         }, status=200)
+
+
 class Login(APIView):
     """
-    Dette technique: Considérer les comptes non actifs
+    Authentification utilisateur sécurisée
     """
+
     def post(self, request):
         email = request.data.get("email")
         password = request.data.get("password")
 
         if not email or not password:
-            return Response({"Error_message": "incorrect email or password"}, status=400)
+            return Response(
+                {"error": "Invalid credentials"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        user = get_object_or_404(ScoreUser, email=email)
+        user = authenticate(request, username=email, password=password)
 
-        if not user.check_password(password):
-            return Response({"Error_message": "Bad password"}, status=400)
+        if not user:
+            return Response(
+                {"error": "Invalid credentials"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        # Création des tokens
-        refresh_token = RefreshToken.for_user(user)
-        access_token = str(refresh_token.access_token)
+        if not user.is_active:
+            return Response(
+                {"error": "Account is inactive"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        refresh = RefreshToken.for_user(user)
 
         return Response({
-            "access_token": access_token,
-            "refresh_token": str(refresh_token),
+            "access_token": str(refresh.access_token),
+            "refresh_token": str(refresh),
             "type_user": user.role
-        }, status=200)
+        }, status=status.HTTP_200_OK)
+
+
 
 class VerifyPasswordSetupCredentials():
     """
