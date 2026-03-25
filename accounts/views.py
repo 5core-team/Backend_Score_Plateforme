@@ -22,6 +22,19 @@ from rest_framework.permissions import IsAuthenticated
 from .serializers import UserProfileSerializer
 from .models import ScoreUser
 
+
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from django.utils.http import urlsafe_base64_decode
+from django.utils.encoding import force_str
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+
+from .models import AccountCredentials, ScoreUser  # ton modèle utilisateur
+
+
 @method_decorator(csrf_exempt, name='dispatch')
 # class Login(APIView):
 #     """
@@ -88,15 +101,39 @@ class Login(APIView):
         }, status=status.HTTP_200_OK)
 
 
+class VerifyPasswordSetupCredentials(APIView):
+    """
+    Vue GET pour vérifier si le token de setup du compte est valide.
+    Paramètres GET: uid, token
+    """
 
-class VerifyPasswordSetupCredentials():
-    """
-    Vue avec une méthode GET
-    Paramètres: uid (userId) et token
-    Logique: Cette vue vérifie si le token n'est pas encore expiré.
-        Utiliser le modèle AccountCredentials
-    """
-    pass
+    def get(self, request):
+        uid = request.query_params.get("uid")
+        token = request.query_params.get("token")
+
+        if not uid or not token:
+            return Response({"error": "Missing parameters"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user_id = force_str(urlsafe_base64_decode(uid))
+            user = get_object_or_404(ScoreUser, pk=user_id)
+        except Exception:
+            return Response({"error": "Invalid uid"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Récupération des credentials
+        try:
+            account_cred = AccountCredentials.objects.get(user=user, token=token)
+        except AccountCredentials.DoesNotExist:
+            return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Vérification de l'expiration
+        if account_cred.expiry_date < timezone.now():
+            return Response({"error": "Token expired"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Si tout est OK
+        return Response({"msg": "Token is valid"}, status=status.HTTP_200_OK)
+
+
 
 class PasswordSetup():
     """
