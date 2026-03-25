@@ -49,6 +49,9 @@ class Login(APIView):
 class PasswordSetup():
     pass
 
+class VerifyPasswordSetupCredentials():
+    pass
+
 class PasswordResetCode():
     pass
 
