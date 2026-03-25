@@ -6,6 +6,8 @@ from .serializers import CountrySerializer
 class CountryViewSet(viewsets.ViewSet):
     """
     ViewSet to manage country (CRUD): for admin only
+    Dette techniques: Ajouter un signal pour envoyer un mail à l'utilisateur crée
+        Le mail contient un lien frontend (frontend.com/account/setup/?uid=...&token=...)
     """
     def create(self, request: Request):
         serializer = CountrySerializer(request.data)
