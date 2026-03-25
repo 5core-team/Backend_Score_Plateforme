@@ -43,6 +43,17 @@ from .models import ScoreUser, AccountCredentials
 
 from .models import AccountCredentials, ScoreUser  # ton modèle utilisateur
 
+import random
+from datetime import timedelta
+from django.utils import timezone
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from django.shortcuts import get_object_or_404
+
+from .models import ScoreUser, PasswordResetCodeModel  # modèle pour stocker le code
+
+
 
 @method_decorator(csrf_exempt, name='dispatch')
 # class Login(APIView):
@@ -186,16 +197,56 @@ class PasswordSetup(APIView):
 
         return Response({"msg": "Password set successfully"}, status=status.HTTP_200_OK)
 
-class PasswordResetCode():
+
+class PasswordResetCode(APIView):
     """
-    Vue avec une méthode POST
+    POST: Obtenir un code de réinitialisation du mot de passe
     Paramètres: email
-    Logique: Obtenir un code de validation pour la rénitialisation du mot de passe (utile pour mot de passe oublié)
     Contraintes:
-        - Délai entre génération de code est de 90s
-        - Pas plus de 4 tentatives dans la journée
+        - Délai entre génération de code: 90 secondes
+        - Pas plus de 4 tentatives par jour
     """
-    pass
+
+    def post(self, request):
+        email = request.data.get("email")
+
+        if not email:
+            return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = get_object_or_404(ScoreUser, email=email)
+
+        # Filtrer les codes créés aujourd'hui
+        today = timezone.now().date()
+        codes_today = PasswordResetCodeModel.objects.filter(user=user, created_at__date=today)
+
+        if codes_today.count() >= 4:
+            return Response(
+                {"error": "Maximum number of reset attempts reached today"},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
+        # Vérifier délai de 90s depuis le dernier code
+        last_code = codes_today.order_by('-created_at').first()
+        if last_code and timezone.now() - last_code.created_at < timedelta(seconds=90):
+            return Response(
+                {"error": "Wait before requesting a new code"},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
+        # Génération d'un code à 6 chiffres
+        code = str(random.randint(100000, 999999))
+
+        # Stockage en DB
+        PasswordResetCodeModel.objects.create(
+            user=user,
+            code=code,
+            expiry_date=timezone.now() + timedelta(minutes=10)  # par exemple valable 10 min
+        )
+
+        # Ici tu peux envoyer le code par mail
+        # send_email({"subject": "Password Reset Code", "message": f"Your code is {code}", "to": user.email})
+
+        return Response({"msg": "Reset code generated successfully"}, status=status.HTTP_200_OK)
 
 class VerifyValidationCode():
     """
