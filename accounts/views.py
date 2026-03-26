@@ -53,6 +53,24 @@ from django.shortcuts import get_object_or_404
 
 from .models import ScoreUser, PasswordResetCodeModel  # modèle pour stocker le code
 
+import uuid
+from datetime import timedelta
+from django.utils import timezone
+from django.conf import settings
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from django.shortcuts import get_object_or_404
+
+from .models import ScoreUser, PasswordResetCodeModel, AccountCredentials
+
+from django.utils import timezone
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+
+from .models import AccountCredentials
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -248,25 +266,116 @@ class PasswordResetCode(APIView):
 
         return Response({"msg": "Reset code generated successfully"}, status=status.HTTP_200_OK)
 
-class VerifyValidationCode():
-    """
-    Vue avec méthode POST
-    Paramètres: email, code (reçu par mail)
-    Logique: Vérifier le code reçu par mail pour la rénitialisation de mot de passe et retourner un token
-        qui expire sur une durée déterminée
-    Contraintes:
-        - La durée de validité du token doit être configurable
-        - Une fois utilisé le token est invalide
-    """
-    pass
 
-class ResetPassword():
+
+class VerifyValidationCode(APIView):
     """
-    Vue avec une méthode POST
-    Paramètres: token et password
-    Logique: Vérifier la validité du token et rénitialiser le mot de passe
+    POST: Vérifier le code reçu par mail et retourner un token de reset
+
+    Paramètres: email, code
     """
-    pass
+
+    def post(self, request):
+        email = request.data.get("email")
+        code = request.data.get("code")
+
+        if not email or not code:
+            return Response(
+                {"error": "Missing parameters"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user = get_object_or_404(ScoreUser, email=email)
+
+        # Vérifier le code le plus récent
+        reset_code = PasswordResetCodeModel.objects.filter(
+            user=user,
+            code=code
+        ).order_by('-created_at').first()
+
+        if not reset_code:
+            return Response(
+                {"error": "Invalid code"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Vérifier expiration du code
+        if reset_code.expiry_date < timezone.now():
+            return Response(
+                {"error": "Code expired"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Génération d’un token sécurisé
+        token = str(uuid.uuid4())
+
+        # Durée configurable (ex: settings.RESET_TOKEN_EXPIRY_MINUTES = 15)
+        expiry_minutes = getattr(settings, "RESET_TOKEN_EXPIRY_MINUTES", 15)
+
+        AccountCredentials.objects.create(
+            user=user,
+            token=token,
+            expiry_date=timezone.now() + timedelta(minutes=expiry_minutes)
+        )
+
+        # Optionnel: supprimer le code pour éviter réutilisation
+        reset_code.delete()
+
+        return Response(
+            {
+                "reset_token": token,
+                "expires_in": expiry_minutes * 60  # en secondes
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class ResetPassword(APIView):
+    """
+    POST: Réinitialiser le mot de passe avec un token
+
+    Paramètres: token, password
+    """
+
+    def post(self, request):
+        token = request.data.get("token")
+        password = request.data.get("password")
+
+        if not token or not password:
+            return Response(
+                {"error": "Missing parameters"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Vérifier le token
+        credentials = AccountCredentials.objects.filter(token=token).first()
+
+        if not credentials:
+            return Response(
+                {"error": "Invalid token"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Vérifier expiration
+        if credentials.expiry_date < timezone.now():
+            return Response(
+                {"error": "Token expired"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user = credentials.user
+
+        # Reset du mot de passe
+        user.set_password(password)
+        user.save()
+
+        # Invalider le token (usage unique)
+        credentials.delete()
+
+        return Response(
+            {"msg": "Password reset successfully"},
+            status=status.HTTP_200_OK
+        )
 
 @method_decorator(csrf_exempt, name='dispatch')
 class ChangePassword(APIView):
