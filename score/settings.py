@@ -67,8 +67,8 @@ INSTALLED_APPS = [
     'geography',
     'customers',
     'corsheaders',
-    'drf_spectacular',
     'rest_framework',
+    'drf_spectacular',
 ]
 
 # AUTH_USER_MODEL = 'accounts.ScoreUser'

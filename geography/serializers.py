@@ -1,4 +1,4 @@
-from .models import Country
+from .models import Country, SubZone, Zone
 from accounts.models import ScoreUser, AccountCredentials
 from rest_framework import serializers
 from django.db import transaction
@@ -55,5 +55,19 @@ class CountrySerializer(serializers.ModelSerializer):
         )
         return country
 
+class SubZoneSerializer(serializers.ModelSerializer):
+    
+    class Meta:
+        model = SubZone
+        fields = ['name', 'country']
 
-        
+class ZoneSerializer(serializers.ModelSerializer):
+
+    country = serializers.SerializerMethodField()
+    class Meta:
+        fields = ['name', 'country']
+        model = Zone
+
+    def get_country(self, obj: Zone):
+        return CountrySerializer(obj.country).data
+    

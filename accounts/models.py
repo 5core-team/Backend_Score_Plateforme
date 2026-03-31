@@ -7,7 +7,7 @@ from django.conf import settings
 import datetime as dt
 
 
-class ScoreUser(AbstractBaseUser, PermissionsMixin):
+class ScoreUser(AbstractBaseUser):
     ROLE_CHOICES = (
         ('admin', 'Administrateur'),
         ('conseiller', 'Conseiller financier'),

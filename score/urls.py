@@ -5,20 +5,16 @@ from django.conf.urls.static import static
 from django.conf import settings
 
 # ✅ Import Spectacular
-from drf_spectacular.views import (
-    SpectacularAPIView,
-    SpectacularSwaggerView,
-    SpectacularRedocView,
-)
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
+# from drf_spectacular.views import (
+#     SpectacularAPIView,
+#     SpectacularSwaggerView,
+#     SpectacularRedocView,
+# )
 
 urlpatterns = [
     path('admin/', admin.site.urls),
 
-    # Tes apps
-    path('auth/', include('accounts.urls')),
-    path('geography/', include('geography.urls')),
-    path('staff/', include('staff.urls')),
-    path('customers/', include('customers.urls')),
 
     # ✅ Schema OpenAPI
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
@@ -28,6 +24,12 @@ urlpatterns = [
 
     # ✅ Redoc
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+    
+    # Tes apps
+    path('auth/', include('accounts.urls')),
+    path('geography/', include('geography.urls')),
+    path('staff/', include('staff.urls')),
+    path('customers/', include('customers.urls')),
 ]
 
 # ✅ Gestion des fichiers media (OK chez toi)
