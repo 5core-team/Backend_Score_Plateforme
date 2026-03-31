@@ -50,6 +50,7 @@ class CountryViewSet(viewsets.ViewSet):
     """
 
     permission_classes = [IsAdminUser]
+    serializer_class = CountrySerializer
 
     def list(self, request: Request):
         countries = Country.objects.all()

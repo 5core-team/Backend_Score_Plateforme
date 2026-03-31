@@ -10,7 +10,7 @@ class CountrySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Country
-        fields = ['name', 'iso_code']
+        fields = ['name', 'iso_code', 'email', 'username']
         extras_fields = ['email', 'username']
     
     def validate(self, attrs: dict):
