@@ -67,9 +67,11 @@ INSTALLED_APPS = [
     'geography',
     'customers',
     'corsheaders',
+    'drf_spectacular',
+    'rest_framework',
 ]
 
-AUTH_USER_MODEL = 'accounts.ScoreUser'
+# AUTH_USER_MODEL = 'accounts.ScoreUser'
 
 
 MIDDLEWARE = [
@@ -166,6 +168,34 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.AllowAny',
     ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Score API',
+    'DESCRIPTION': 'Documentation de l’API du projet Score',
+    'VERSION': '1.0.0',
+
+    # IMPORTANT
+    'SERVE_INCLUDE_SCHEMA': False,
+
+    # Pour Swagger avec JWT 🔐
+    'COMPONENT_SPLIT_REQUEST': True,
+
+    'SECURITY': [
+        {
+            'Bearer': [],
+        }
+    ],
+
+    'SECURITY_SCHEMES': {
+        'Bearer': {
+            'type': 'http',
+            'scheme': 'bearer',
+            'bearerFormat': 'JWT',
+        }
+    },
 }
 
 SIMPLE_JWT = {

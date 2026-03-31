@@ -51,7 +51,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 
-from .models import ScoreUser, PasswordResetCodeModel  # modèle pour stocker le code
+# from .models import ScoreUser, PasswordResetCodeModel  # modèle pour stocker le code
 
 import uuid
 from datetime import timedelta
@@ -63,7 +63,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 
-from .models import ScoreUser, PasswordResetCodeModel, AccountCredentials
+# from .models import ScoreUser, PasswordResetCodeModel, AccountCredentials
 
 from django.utils import timezone
 from rest_framework.views import APIView
