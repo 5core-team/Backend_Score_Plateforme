@@ -64,3 +64,13 @@ class AccountCredentials(models.Model):
 
     def __str__(self):
         return f"Credentials({self.user.email})"
+    
+
+class PasswordResetCodeModel(models.Model):
+    user        = models.ForeignKey(ScoreUser, on_delete=models.CASCADE)
+    code        = models.CharField(max_length=6)
+    created_at  = models.DateTimeField(auto_now_add=True)
+    expiry_date = models.DateTimeField()
+
+    def __str__(self):
+        return f"ResetCode({self.user.email} - {self.code})"

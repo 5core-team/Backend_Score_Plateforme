@@ -13,7 +13,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework import status, generics
 from rest_framework_simplejwt.tokens import RefreshToken
+# Trouvez cette ligne dans accounts/views.py
+from .models import ScoreUser, AccountCredentials
+from accounts.utils import send_email
 
+# Remplacez par ✅
+from .models import ScoreUser, AccountCredentials, PasswordResetCodeModel
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiResponse, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
 
@@ -196,9 +201,45 @@ class PasswordResetCode(APIView):
         },
     )
     def post(self, request):
-        # ... votre logique existante
-        pass
+        email = request.data.get("email")
 
+        if not email:
+            return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = get_object_or_404(ScoreUser, email=email)
+
+        today = timezone.now().date()
+        codes_today = PasswordResetCodeModel.objects.filter(user=user, created_at__date=today)
+
+        if codes_today.count() >= 4:
+            return Response(
+                {"error": "Maximum number of reset attempts reached today"},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
+        last_code = codes_today.order_by('-created_at').first()
+        if last_code and timezone.now() - last_code.created_at < timedelta(seconds=90):
+            return Response(
+                {"error": "Wait before requesting a new code"},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
+        code = str(random.randint(100000, 999999))
+
+        PasswordResetCodeModel.objects.create(
+            user=user,
+            code=code,
+            expiry_date=timezone.now() + timedelta(minutes=10)
+        )
+
+        # Envoyer le code par mail
+        send_email({
+            "subject": "Code de réinitialisation Score",
+            "message": f"Bonjour {user.username},\n\nVotre code de réinitialisation est : {code}\n\nCe code est valable 10 minutes.",
+            "to": user.email
+        })
+
+        return Response({"msg": "Reset code generated successfully"}, status=status.HTTP_200_OK)
 
 # ─────────────────────────────────────────────
 # VERIFY VALIDATION CODE
@@ -226,9 +267,53 @@ class VerifyValidationCode(APIView):
         },
     )
     def post(self, request):
-        # ... votre logique existante
-        pass
+        email = request.data.get("email")
+        code  = request.data.get("code")
 
+        if not email or not code:
+            return Response(
+                {"error": "Missing parameters"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user = get_object_or_404(ScoreUser, email=email)
+
+        reset_code = PasswordResetCodeModel.objects.filter(
+            user=user,
+            code=code
+        ).order_by('-created_at').first()
+
+        if not reset_code:
+            return Response(
+                {"error": "Invalid code"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if reset_code.expiry_date < timezone.now():
+            return Response(
+                {"error": "Code expired"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Générer un token de reset
+        token = str(uuid.uuid4())
+        expiry_minutes = getattr(settings, "RESET_TOKEN_EXPIRY_MINUTES", 15)
+
+        AccountCredentials.objects.create(
+            user=user,
+            token=token,
+            expiry_date=timezone.now() + timedelta(minutes=expiry_minutes)
+        )
+
+        reset_code.delete()
+
+        return Response(
+            {
+                "reset_token": token,
+                "expires_in": expiry_minutes * 60
+            },
+            status=status.HTTP_200_OK
+        )
 
 # ─────────────────────────────────────────────
 # RESET PASSWORD
@@ -256,9 +341,39 @@ class ResetPassword(APIView):
         },
     )
     def post(self, request):
-        # ... votre logique existante
-        pass
+        token    = request.data.get("token")
+        password = request.data.get("password")
 
+        if not token or not password:
+            return Response(
+                {"error": "Missing parameters"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        credentials = AccountCredentials.objects.filter(token=token).first()
+
+        if not credentials:
+            return Response(
+                {"error": "Invalid token"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if credentials.expiry_date < timezone.now():
+            return Response(
+                {"error": "Token expired"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user = credentials.user
+        user.set_password(password)
+        user.save()
+
+        credentials.delete()
+
+        return Response(
+            {"msg": "Password reset successfully"},
+            status=status.HTTP_200_OK
+        )
 
 # ─────────────────────────────────────────────
 # CHANGE PASSWORD
@@ -288,9 +403,30 @@ class ChangePassword(APIView):
         },
     )
     def post(self, request: Request):
-        # ... votre logique existante
-        pass
+        user         = request.user
+        old_password = request.data.get("old_password")
+        new_password = request.data.get("new_password")
 
+        if not old_password or not new_password:
+            return Response(
+                {"error": "Ancien et nouveau mot de passe requis."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not user.check_password(old_password):
+            return Response(
+                {"error": "Ancien mot de passe incorrect."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user.set_password(new_password)
+        user.password_changed = True
+        user.save()
+
+        return Response(
+            {"message": "Mot de passe modifié avec succès."},
+            status=status.HTTP_200_OK
+        )
 
 # ─────────────────────────────────────────────
 # PROFILE VIEW
@@ -299,11 +435,15 @@ class ChangePassword(APIView):
 @extend_schema(
     tags=["Profil"],
     summary="Mettre à jour le profil utilisateur",
+    description="Permet à un utilisateur authentifié de modifier son username et sa photo.",
     request=UserProfileSerializer,
-    responses={200: UserProfileSerializer},
+    responses={
+        200: UserProfileSerializer,
+        400: OpenApiResponse(description="Données invalides"),
+    },
 )
 class ProfileView(generics.UpdateAPIView):
-    serializer_class = UserProfileSerializer
+    serializer_class   = UserProfileSerializer
     permission_classes = [IsAuthenticated]
 
     def get_object(self):

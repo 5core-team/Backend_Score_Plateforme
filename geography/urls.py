@@ -1,6 +1,10 @@
+from rest_framework.routers import DefaultRouter
 from django.urls import path
-from .views import CountryViewSet
+from .views import CountryViewSet, ZoneViewSet, SubZoneViewSet
 
-urlpatterns = [
-    path('add-country/', CountryViewSet.as_view({'post': 'create'})),
-]
+router = DefaultRouter()
+router.register(r'countries', CountryViewSet, basename='country')  # ✅ remplace add-country
+router.register(r'zones',     ZoneViewSet,    basename='zone')
+router.register(r'subzones',  SubZoneViewSet, basename='subzone')
+
+urlpatterns = router.urls
