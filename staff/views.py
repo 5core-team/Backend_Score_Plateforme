@@ -223,3 +223,17 @@ class FinancialAdvisorViewSet(viewsets.ModelViewSet):
             return FinancialAdvisor.objects.filter(user=user)
 
         return FinancialAdvisor.objects.none()
+    
+class FrontOfficeViewSet(viewsets.ModelViewSet):
+    serializer_class   = FrontOfficeSerializer
+    lookup_value_regex = r'\d+'  # ✅
+    ...
+
+class HuissierViewSet(viewsets.ModelViewSet):
+    serializer_class   = HuissierSerializer
+    lookup_value_regex = r'\d+'  # ✅
+    ...
+
+class FinancialAdvisorViewSet(viewsets.ModelViewSet):
+    serializer_class   = FinancialAdvisorSerializer
+    lookup_value_regex = r'\d+'  # ✅

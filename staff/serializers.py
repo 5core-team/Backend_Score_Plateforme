@@ -33,7 +33,7 @@ class BaseStaffSerializer(serializers.ModelSerializer):
         user.set_unusable_password()
         user.save()
 
-        token = secrets.token_urlsafe(32)
+        token          = secrets.token_urlsafe(32)
         expiry_minutes = getattr(settings, "SETUP_TOKEN_EXPIRY_MINUTES", 1440)
 
         AccountCredentials.objects.create(
@@ -53,9 +53,21 @@ class BaseStaffSerializer(serializers.ModelSerializer):
 class FrontOfficeSerializer(BaseStaffSerializer):
     class Meta:
         model  = FrontOffice
-        fields = ['id', 'email', 'username', 'zone', 'is_active']
+        fields = [
+            'id',
+            'email',
+            'username',
+            'zone',
+            'name',       # ✅ ajouté
+            'npi',        # ✅ ajouté
+            'phone',      # ✅ ajouté
+            'is_active',
+        ]
         extra_kwargs = {
             'zone':      {'help_text': "ID de la zone"},
+            'name':      {'help_text': "Nom du front office", 'required': False},
+            'npi':       {'help_text': "Numéro de pièce d'identité", 'required': False},
+            'phone':     {'help_text': "Numéro de téléphone", 'required': False},
             'is_active': {'read_only': True},
         }
 
@@ -74,10 +86,23 @@ class FrontOfficeSerializer(BaseStaffSerializer):
 class HuissierSerializer(BaseStaffSerializer):
     class Meta:
         model  = Huissier
-        fields = ['id', 'email', 'username', 'zone', 'subZone', 'is_active']
+        fields = [
+            'id',
+            'email',
+            'username',
+            'zone',
+            'subZone',
+            'npi',        # ✅ ajouté
+            'phone',      # ✅ ajouté
+            'picture',    # ✅ ajouté
+            'is_active',
+        ]
         extra_kwargs = {
             'zone':      {'help_text': "ID de la zone"},
-            'subZone':   {'help_text': "ID de la sous-zone"},
+            'subZone':   {'help_text': "ID de la sous-zone", 'required': False},
+            'npi':       {'help_text': "Numéro de pièce d'identité", 'required': False},
+            'phone':     {'help_text': "Numéro de téléphone", 'required': False},
+            'picture':   {'help_text': "Photo de l'huissier", 'required': False},
             'is_active': {'read_only': True},
         }
 
@@ -96,10 +121,25 @@ class HuissierSerializer(BaseStaffSerializer):
 class FinancialAdvisorSerializer(BaseStaffSerializer):
     class Meta:
         model  = FinancialAdvisor
-        fields = ['id', 'email', 'username', 'zone', 'subZone', 'is_active']
+        fields = [
+            'id',
+            'email',
+            'username',
+            'zone',
+            'subZone',
+            'name',       # ✅ ajouté
+            'npi',        # ✅ ajouté
+            'phone',      # ✅ ajouté
+            'picture',    # ✅ ajouté
+            'is_active',
+        ]
         extra_kwargs = {
             'zone':      {'help_text': "ID de la zone"},
-            'subZone':   {'help_text': "ID de la sous-zone"},
+            'subZone':   {'help_text': "ID de la sous-zone", 'required': False},
+            'name':      {'help_text': "Nom du conseiller", 'required': False},
+            'npi':       {'help_text': "Numéro de pièce d'identité", 'required': False},
+            'phone':     {'help_text': "Numéro de téléphone", 'required': False},
+            'picture':   {'help_text': "Photo du conseiller", 'required': False},
             'is_active': {'read_only': True},
         }
 

@@ -309,3 +309,18 @@ class SubZoneViewSet(viewsets.ModelViewSet):
                 return SubZone.objects.filter(zone__country=fa.zone.country) if fa else SubZone.objects.none()
 
         return SubZone.objects.none()
+    
+
+class CountryViewSet(viewsets.ViewSet):
+    serializer_class    = CountrySerializer
+    lookup_value_regex  = r'\d+'  # ✅ force le type int dans l'URL
+    ...
+
+class ZoneViewSet(viewsets.ModelViewSet):
+    serializer_class    = ZoneSerializer
+    lookup_value_regex  = r'\d+'  # ✅
+    ...
+
+class SubZoneViewSet(viewsets.ModelViewSet):
+    serializer_class    = SubZoneSerializer
+    lookup_value_regex  = r'\d+'  # ✅

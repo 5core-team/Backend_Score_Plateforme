@@ -5,9 +5,30 @@ from django.conf import settings
 from datetime import timedelta
 import secrets
 
-from .models import Country, Zone, SubZone
+from .models import Country, Zone, SubZone, Subscription
 from accounts.models import ScoreUser, AccountCredentials
 from accounts.utils import send_account_setup_email
+
+
+# ─────────────────────────────────────────────
+# SUBSCRIPTION SERIALIZER
+# ─────────────────────────────────────────────
+
+class SubscriptionSerializer(serializers.ModelSerializer):
+    is_active    = serializers.SerializerMethodField(help_text="Abonnement actif ou non")
+    country_name = serializers.CharField(source='country.name', read_only=True)
+
+    class Meta:
+        model  = Subscription
+        fields = ['id', 'country', 'country_name', 'created_at', 'expires_in', 'is_active']
+        extra_kwargs = {
+            'country':    {'write_only': True, 'help_text': "ID du pays"},
+            'expires_in': {'help_text': "Date d'expiration de l'abonnement"},
+            'created_at': {'read_only': True},
+        }
+
+    def get_is_active(self, obj):
+        return obj.is_active()
 
 
 # ─────────────────────────────────────────────
@@ -18,12 +39,26 @@ class CountrySerializer(serializers.ModelSerializer):
     email    = serializers.EmailField(write_only=True, help_text="Email du manager du pays")
     username = serializers.CharField(max_length=100, write_only=True, help_text="Nom d'utilisateur du manager")
 
+    # ✅ Champs en lecture seule
+    has_valid_subscription = serializers.BooleanField(read_only=True, help_text="Abonnement valide ou non")
+
     class Meta:
         model  = Country
-        fields = ['id', 'name', 'iso_code', 'email', 'username']
+        fields = [
+            'id',
+            'name',
+            'iso_code',
+            'phone_code',           # ✅ ajouté
+            'licence_status',       # ✅ ajouté
+            'has_valid_subscription', # ✅ ajouté
+            'email',
+            'username',
+        ]
         extra_kwargs = {
-            'name':     {'help_text': "Nom du pays"},
-            'iso_code': {'help_text': "Code ISO du pays (ex: BJ, FR)"},
+            'name':           {'help_text': "Nom du pays"},
+            'iso_code':       {'help_text': "Code ISO du pays (ex: BJ, FR)"},
+            'phone_code':     {'help_text': "Indicatif téléphonique (ex: +229)", 'required': False},
+            'licence_status': {'help_text': "Statut de la licence", 'read_only': True},
         }
 
     def validate(self, attrs: dict):
@@ -83,7 +118,7 @@ class ZoneSerializer(serializers.ModelSerializer):
             'country': {
                 'write_only': True,
                 'help_text':  "ID du pays",
-                'required':   False,  # ✅ géré automatiquement via perform_create
+                'required':   False,
             },
             'name': {'help_text': "Nom de la zone"},
         }
