@@ -26,9 +26,14 @@ environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
 SECRET_KEY = 'django-insecure-p(31*$-(60m=09woo$awze2(w4n8b5mx_a0)dc+7@rs^d*61vt'
 
-DEBUG = True
 
-ALLOWED_HOSTS = ['*']
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG =False
+
+# ALLOWED_HOSTS = ["192.168.1.15", "0.0.0.0", "127.0.0.1", "localhost", "192.168.100.184"]
+#ALLOWED_HOSTS = ['*']
+#ALLOWED_HOSTS = ["api.africarisque.com", "localhost", "127.0.0.1","africarisque.com"]
+ALLOWED_HOSTS = ["africarisque.com","www.africarisque.com","api.africarisque.com", "www.api.africarisque.com", "localhost", "127.0.0.1"]
 
 
 # ─────────────────────────────────────────────
@@ -113,6 +118,12 @@ CORS_ALLOW_ALL_ORIGINS = True
 # ─────────────────────────────────────────────
 # BASE DE DONNÉES
 # ─────────────────────────────────────────────
+
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# Database
+# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
     'default': {
