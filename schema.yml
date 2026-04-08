@@ -1,0 +1,1607 @@
+openapi: 3.0.3
+info:
+  title: Score API
+  version: 1.0.0
+  description: Documentation de l'API du projet Score
+paths:
+  /api/auth/change-password/:
+    post:
+      operationId: auth_change_password_create
+      description: Permet à un utilisateur authentifié de changer son mot de passe.
+      summary: Changer le mot de passe
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                old_password:
+                  type: string
+                new_password:
+                  type: string
+              required:
+              - old_password
+              - new_password
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      responses:
+        '200':
+          description: Mot de passe modifié avec succès
+        '400':
+          description: Ancien mot de passe incorrect ou paramètres manquants
+  /api/auth/login/:
+    post:
+      operationId: auth_login_create
+      description: Authentification par email/password. Retourne les tokens JWT.
+      summary: Connexion utilisateur
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+          description: ''
+        '400':
+          description: Identifiants invalides
+        '403':
+          description: Compte inactif
+  /api/auth/password-setup/:
+    post:
+      operationId: auth_password_setup_create
+      description: Permet à un utilisateur de définir son mot de passe via uid et
+        token reçus par email.
+      summary: Définir le mot de passe initial
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                uid:
+                  type: string
+                token:
+                  type: string
+                password:
+                  type: string
+              required:
+              - uid
+              - token
+              - password
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          description: Mot de passe défini avec succès
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Paramètres invalides ou token expiré
+  /api/auth/profile/:
+    put:
+      operationId: auth_profile_update
+      description: Permet à un utilisateur authentifié de modifier son username et
+        sa photo.
+      summary: Mettre à jour le profil utilisateur
+      tags:
+      - Profil
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserProfileRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserProfileRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserProfileRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+          description: ''
+        '400':
+          description: Données invalides
+    patch:
+      operationId: auth_profile_partial_update
+      description: Permet à un utilisateur authentifié de modifier son username et
+        sa photo.
+      summary: Mettre à jour le profil utilisateur
+      tags:
+      - Profil
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUserProfileRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUserProfileRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUserProfileRequest'
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+          description: ''
+        '400':
+          description: Données invalides
+  /api/auth/reset-code/:
+    post:
+      operationId: auth_reset_code_create
+      description: Envoie un code OTP à 6 chiffres par email. Limité à 4 tentatives/jour
+        avec 90s entre chaque.
+      summary: Demander un code de réinitialisation
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+              required:
+              - email
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          description: Code généré avec succès
+        '400':
+          description: Email manquant
+        '429':
+          description: Trop de tentatives ou délai non respecté
+  /api/auth/reset-password/:
+    post:
+      operationId: auth_reset_password_create
+      description: Réinitialise le mot de passe avec le token reçu après validation
+        du code OTP.
+      summary: Réinitialiser le mot de passe
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                password:
+                  type: string
+              required:
+              - token
+              - password
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          description: Mot de passe réinitialisé avec succès
+        '400':
+          description: Token invalide ou expiré
+  /api/auth/verify-code/:
+    post:
+      operationId: auth_verify_code_create
+      description: Valide le code OTP et retourne un token de réinitialisation.
+      summary: Vérifier le code OTP reçu par email
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                code:
+                  type: string
+              required:
+              - email
+              - code
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          description: Token de reset retourné
+        '400':
+          description: Code invalide ou expiré
+  /api/auth/verify-credentials/:
+    get:
+      operationId: auth_verify_credentials_retrieve
+      description: Vérifie si le uid et le token sont valides avant de permettre à
+        l'utilisateur de définir son mot de passe.
+      summary: Vérifier les credentials pour setup du mot de passe
+      parameters:
+      - in: query
+        name: token
+        schema:
+          type: string
+        required: true
+      - in: query
+        name: uid
+        schema:
+          type: string
+        required: true
+      tags:
+      - Auth
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          description: Token valide
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Paramètres invalides ou token expiré
+  /api/geography/subzones/:
+    get:
+      operationId: geography_subzones_list
+      tags:
+      - geography
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SubZone'
+          description: ''
+    post:
+      operationId: geography_subzones_create
+      tags:
+      - geography
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubZoneRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SubZoneRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SubZoneRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubZone'
+          description: ''
+  /api/geography/subzones/{id}/:
+    get:
+      operationId: geography_subzones_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - geography
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubZone'
+          description: ''
+    put:
+      operationId: geography_subzones_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - geography
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubZoneRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SubZoneRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SubZoneRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubZone'
+          description: ''
+    patch:
+      operationId: geography_subzones_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - geography
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSubZoneRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSubZoneRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSubZoneRequest'
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubZone'
+          description: ''
+    delete:
+      operationId: geography_subzones_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - geography
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '204':
+          description: No response body
+  /api/geography/zones/:
+    get:
+      operationId: geography_zones_list
+      tags:
+      - geography
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Zone'
+          description: ''
+    post:
+      operationId: geography_zones_create
+      tags:
+      - geography
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZoneRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ZoneRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ZoneRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+          description: ''
+  /api/geography/zones/{id}/:
+    get:
+      operationId: geography_zones_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - geography
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+          description: ''
+    put:
+      operationId: geography_zones_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - geography
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZoneRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ZoneRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ZoneRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+          description: ''
+    patch:
+      operationId: geography_zones_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - geography
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedZoneRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedZoneRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedZoneRequest'
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+          description: ''
+    delete:
+      operationId: geography_zones_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - geography
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '204':
+          description: No response body
+  /api/staff/financial-advisors/:
+    get:
+      operationId: staff_financial_advisors_list
+      tags:
+      - staff
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FinancialAdvisor'
+          description: ''
+    post:
+      operationId: staff_financial_advisors_create
+      tags:
+      - staff
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FinancialAdvisorRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/FinancialAdvisorRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FinancialAdvisorRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinancialAdvisor'
+          description: ''
+  /api/staff/financial-advisors/{id}/:
+    get:
+      operationId: staff_financial_advisors_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - staff
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinancialAdvisor'
+          description: ''
+    put:
+      operationId: staff_financial_advisors_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - staff
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FinancialAdvisorRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/FinancialAdvisorRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FinancialAdvisorRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinancialAdvisor'
+          description: ''
+    patch:
+      operationId: staff_financial_advisors_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - staff
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedFinancialAdvisorRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedFinancialAdvisorRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedFinancialAdvisorRequest'
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinancialAdvisor'
+          description: ''
+    delete:
+      operationId: staff_financial_advisors_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - staff
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '204':
+          description: No response body
+  /api/staff/front-offices/:
+    get:
+      operationId: staff_front_offices_list
+      tags:
+      - staff
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FrontOffice'
+          description: ''
+    post:
+      operationId: staff_front_offices_create
+      tags:
+      - staff
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FrontOfficeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/FrontOfficeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FrontOfficeRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrontOffice'
+          description: ''
+  /api/staff/front-offices/{id}/:
+    get:
+      operationId: staff_front_offices_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - staff
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrontOffice'
+          description: ''
+    put:
+      operationId: staff_front_offices_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - staff
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FrontOfficeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/FrontOfficeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FrontOfficeRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrontOffice'
+          description: ''
+    patch:
+      operationId: staff_front_offices_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - staff
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedFrontOfficeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedFrontOfficeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedFrontOfficeRequest'
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrontOffice'
+          description: ''
+    delete:
+      operationId: staff_front_offices_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - staff
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '204':
+          description: No response body
+  /api/staff/huissiers/:
+    get:
+      operationId: staff_huissiers_list
+      tags:
+      - staff
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Huissier'
+          description: ''
+    post:
+      operationId: staff_huissiers_create
+      tags:
+      - staff
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HuissierRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/HuissierRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/HuissierRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Huissier'
+          description: ''
+  /api/staff/huissiers/{id}/:
+    get:
+      operationId: staff_huissiers_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - staff
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Huissier'
+          description: ''
+    put:
+      operationId: staff_huissiers_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - staff
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HuissierRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/HuissierRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/HuissierRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Huissier'
+          description: ''
+    patch:
+      operationId: staff_huissiers_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - staff
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedHuissierRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedHuissierRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedHuissierRequest'
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Huissier'
+          description: ''
+    delete:
+      operationId: staff_huissiers_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - staff
+      security:
+      - jwtAuth: []
+      - Bearer: []
+      - {}
+      responses:
+        '204':
+          description: No response body
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Message d'erreur
+      required:
+      - error
+    FinancialAdvisor:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        zone:
+          type: integer
+          nullable: true
+          description: ID de la zone
+        subZone:
+          type: integer
+          nullable: true
+          description: ID de la sous-zone
+        name:
+          type: string
+          nullable: true
+          description: Nom du conseiller
+          maxLength: 255
+        npi:
+          type: string
+          nullable: true
+          description: Numéro de pièce d'identité
+          maxLength: 100
+        phone:
+          type: string
+          nullable: true
+          description: Numéro de téléphone
+          maxLength: 100
+        picture:
+          type: string
+          format: uri
+          nullable: true
+          description: Photo du conseiller
+        is_active:
+          type: boolean
+          readOnly: true
+      required:
+      - id
+      - is_active
+    FinancialAdvisorRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          writeOnly: true
+          minLength: 1
+          description: Email du staff
+        username:
+          type: string
+          writeOnly: true
+          minLength: 1
+          description: Nom d'utilisateur
+          maxLength: 100
+        zone:
+          type: integer
+          nullable: true
+          description: ID de la zone
+        subZone:
+          type: integer
+          nullable: true
+          description: ID de la sous-zone
+        name:
+          type: string
+          nullable: true
+          description: Nom du conseiller
+          maxLength: 255
+        npi:
+          type: string
+          nullable: true
+          description: Numéro de pièce d'identité
+          maxLength: 100
+        phone:
+          type: string
+          nullable: true
+          description: Numéro de téléphone
+          maxLength: 100
+        picture:
+          type: string
+          format: binary
+          nullable: true
+          description: Photo du conseiller
+      required:
+      - email
+      - username
+    FrontOffice:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        zone:
+          type: integer
+          description: ID de la zone
+        name:
+          type: string
+          nullable: true
+          description: Nom du front office
+          maxLength: 255
+        npi:
+          type: string
+          nullable: true
+          description: Numéro de pièce d'identité
+          maxLength: 200
+        phone:
+          type: string
+          nullable: true
+          description: Numéro de téléphone
+          maxLength: 100
+        is_active:
+          type: boolean
+          readOnly: true
+      required:
+      - id
+      - is_active
+      - zone
+    FrontOfficeRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          writeOnly: true
+          minLength: 1
+          description: Email du staff
+        username:
+          type: string
+          writeOnly: true
+          minLength: 1
+          description: Nom d'utilisateur
+          maxLength: 100
+        zone:
+          type: integer
+          description: ID de la zone
+        name:
+          type: string
+          nullable: true
+          description: Nom du front office
+          maxLength: 255
+        npi:
+          type: string
+          nullable: true
+          description: Numéro de pièce d'identité
+          maxLength: 200
+        phone:
+          type: string
+          nullable: true
+          description: Numéro de téléphone
+          maxLength: 100
+      required:
+      - email
+      - username
+      - zone
+    Huissier:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        zone:
+          type: integer
+          nullable: true
+          description: ID de la zone
+        subZone:
+          type: integer
+          nullable: true
+          description: ID de la sous-zone
+        npi:
+          type: string
+          nullable: true
+          description: Numéro de pièce d'identité
+          maxLength: 100
+        phone:
+          type: string
+          nullable: true
+          description: Numéro de téléphone
+          maxLength: 200
+        picture:
+          type: string
+          format: uri
+          nullable: true
+          description: Photo de l'huissier
+        is_active:
+          type: boolean
+          readOnly: true
+      required:
+      - id
+      - is_active
+    HuissierRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          writeOnly: true
+          minLength: 1
+          description: Email du staff
+        username:
+          type: string
+          writeOnly: true
+          minLength: 1
+          description: Nom d'utilisateur
+          maxLength: 100
+        zone:
+          type: integer
+          nullable: true
+          description: ID de la zone
+        subZone:
+          type: integer
+          nullable: true
+          description: ID de la sous-zone
+        npi:
+          type: string
+          nullable: true
+          description: Numéro de pièce d'identité
+          maxLength: 100
+        phone:
+          type: string
+          nullable: true
+          description: Numéro de téléphone
+          maxLength: 200
+        picture:
+          type: string
+          format: binary
+          nullable: true
+          description: Photo de l'huissier
+      required:
+      - email
+      - username
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+          description: Adresse email de l'utilisateur
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+          description: Mot de passe
+      required:
+      - email
+      - password
+    LoginResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT access token
+        refresh_token:
+          type: string
+          description: JWT refresh token
+        type_user:
+          type: string
+          description: 'Rôle de l''utilisateur (ex: admin, user)'
+      required:
+      - access_token
+      - refresh_token
+      - type_user
+    PatchedFinancialAdvisorRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          writeOnly: true
+          minLength: 1
+          description: Email du staff
+        username:
+          type: string
+          writeOnly: true
+          minLength: 1
+          description: Nom d'utilisateur
+          maxLength: 100
+        zone:
+          type: integer
+          nullable: true
+          description: ID de la zone
+        subZone:
+          type: integer
+          nullable: true
+          description: ID de la sous-zone
+        name:
+          type: string
+          nullable: true
+          description: Nom du conseiller
+          maxLength: 255
+        npi:
+          type: string
+          nullable: true
+          description: Numéro de pièce d'identité
+          maxLength: 100
+        phone:
+          type: string
+          nullable: true
+          description: Numéro de téléphone
+          maxLength: 100
+        picture:
+          type: string
+          format: binary
+          nullable: true
+          description: Photo du conseiller
+    PatchedFrontOfficeRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          writeOnly: true
+          minLength: 1
+          description: Email du staff
+        username:
+          type: string
+          writeOnly: true
+          minLength: 1
+          description: Nom d'utilisateur
+          maxLength: 100
+        zone:
+          type: integer
+          description: ID de la zone
+        name:
+          type: string
+          nullable: true
+          description: Nom du front office
+          maxLength: 255
+        npi:
+          type: string
+          nullable: true
+          description: Numéro de pièce d'identité
+          maxLength: 200
+        phone:
+          type: string
+          nullable: true
+          description: Numéro de téléphone
+          maxLength: 100
+    PatchedHuissierRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          writeOnly: true
+          minLength: 1
+          description: Email du staff
+        username:
+          type: string
+          writeOnly: true
+          minLength: 1
+          description: Nom d'utilisateur
+          maxLength: 100
+        zone:
+          type: integer
+          nullable: true
+          description: ID de la zone
+        subZone:
+          type: integer
+          nullable: true
+          description: ID de la sous-zone
+        npi:
+          type: string
+          nullable: true
+          description: Numéro de pièce d'identité
+          maxLength: 100
+        phone:
+          type: string
+          nullable: true
+          description: Numéro de téléphone
+          maxLength: 200
+        picture:
+          type: string
+          format: binary
+          nullable: true
+          description: Photo de l'huissier
+    PatchedSubZoneRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Nom de la sous-zone
+          maxLength: 255
+        zone:
+          type: integer
+          writeOnly: true
+          description: ID de la zone parente
+    PatchedUserProfileRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 100
+        photo:
+          type: string
+          format: binary
+          nullable: true
+    PatchedZoneRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Nom de la zone
+          maxLength: 255
+        country:
+          type: integer
+          writeOnly: true
+          description: ID du pays
+    RoleEnum:
+      enum:
+      - admin
+      - conseiller
+      - huissier
+      - country
+      - front office
+      type: string
+      description: |-
+        * `admin` - Administrateur
+        * `conseiller` - Conseiller financier
+        * `huissier` - Huissier
+        * `country` - Représentant pays
+        * `front office` - Représentant département
+    SubZone:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          description: Nom de la sous-zone
+          maxLength: 255
+        zone_name:
+          type: string
+          readOnly: true
+          description: Nom de la zone parente
+        country_name:
+          type: string
+          readOnly: true
+          description: Nom du pays
+      required:
+      - country_name
+      - id
+      - name
+      - zone_name
+    SubZoneRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Nom de la sous-zone
+          maxLength: 255
+        zone:
+          type: integer
+          writeOnly: true
+          description: ID de la zone parente
+      required:
+      - name
+      - zone
+    UserProfile:
+      type: object
+      properties:
+        role:
+          allOf:
+          - $ref: '#/components/schemas/RoleEnum'
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        username:
+          type: string
+          maxLength: 100
+        password_changed:
+          type: boolean
+          readOnly: true
+        photo:
+          type: string
+          format: uri
+          nullable: true
+        is_active:
+          type: boolean
+          readOnly: true
+      required:
+      - email
+      - is_active
+      - password_changed
+      - role
+      - username
+    UserProfileRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 100
+        photo:
+          type: string
+          format: binary
+          nullable: true
+      required:
+      - username
+    Zone:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          description: Nom de la zone
+          maxLength: 255
+        country_name:
+          type: string
+          readOnly: true
+          description: Nom du pays
+      required:
+      - country_name
+      - id
+      - name
+    ZoneRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Nom de la zone
+          maxLength: 255
+        country:
+          type: integer
+          writeOnly: true
+          description: ID du pays
+      required:
+      - name
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
