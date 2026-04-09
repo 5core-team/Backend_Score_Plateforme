@@ -38,8 +38,6 @@ class SubscriptionSerializer(serializers.ModelSerializer):
 class CountrySerializer(serializers.ModelSerializer):
     email    = serializers.EmailField(write_only=True, help_text="Email du manager du pays")
     username = serializers.CharField(max_length=100, write_only=True, help_text="Nom d'utilisateur du manager")
-
-    # ✅ Champs en lecture seule
     has_valid_subscription = serializers.BooleanField(read_only=True, help_text="Abonnement valide ou non")
 
     class Meta:
@@ -48,9 +46,9 @@ class CountrySerializer(serializers.ModelSerializer):
             'id',
             'name',
             'iso_code',
-            'phone_code',           # ✅ ajouté
-            'licence_status',       # ✅ ajouté
-            'has_valid_subscription', # ✅ ajouté
+            'phone_code',
+            'licence_status',
+            'has_valid_subscription',
             'email',
             'username',
         ]
@@ -118,7 +116,8 @@ class ZoneSerializer(serializers.ModelSerializer):
             'country': {
                 'write_only': True,
                 'help_text':  "ID du pays",
-                'required':   False,
+                'required':   False,   # ✅ pas requis
+                'allow_null': True,    # ✅ accepte null
             },
             'name': {'help_text': "Nom de la zone"},
         }
@@ -144,6 +143,10 @@ class SubZoneSerializer(serializers.ModelSerializer):
         model  = SubZone
         fields = ['id', 'name', 'zone', 'zone_name', 'country_name']
         extra_kwargs = {
-            'zone': {'write_only': True, 'help_text': "ID de la zone parente"},
+            'zone': {
+                'write_only': True,
+                'help_text':  "ID de la zone parente",
+                'required':   True,    # ✅ zone obligatoire pour une subzone
+            },
             'name': {'help_text': "Nom de la sous-zone"},
         }

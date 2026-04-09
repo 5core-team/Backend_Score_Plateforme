@@ -1,0 +1,51 @@
+Voici le résumé complet de tous les dashboards :
+
+👑 Super Admin — /api/dashboard/admin/
+
+Pays — total, actifs, expirés, détail par pays
+Staff — Front Offices, Huissiers, Conseillers (total + actifs)
+Clients — total, répartition par pays
+Dettes — total, pending, done, en retard, vérifiées, montants
+Remboursements — total
+Activité — sessions actives, OTPs des 24 dernières heures
+
+
+🌍 Représentant Pays — /api/dashboard/country/
+
+Son pays — nom, code ISO, statut abonnement, date d'expiration
+Ses zones — total, détail par zone (clients + front offices)
+Staff — Front Offices, Huissiers, Conseillers (total + actifs)
+Clients — total, répartition par zone
+Dettes — total, pending, done, en retard, vérifiées, montants
+Remboursements — total
+Activité — sessions actives, OTPs des 24 dernières heures
+
+
+🏢 Front Office — /api/dashboard/front-office/
+
+Sa zone — nom, pays associé
+Ses sous-zones — total, détail par sous-zone (nombre de clients)
+Staff — Huissiers, Conseillers (total + actifs)
+Clients — total, répartition par sous-zone
+Dettes — total, pending, done, en retard, vérifiées, montants
+Remboursements — total
+Activité — sessions actives, OTPs des 24 dernières heures
+
+
+⚖️ Huissier — /api/dashboard/huissier/
+
+Son profil — email, username, zone, sous-zone
+Dossiers créés — total des clients qu'il a enregistrés
+Taux de réponse — % de dettes validées par les clients
+Consultations — total des sessions effectuées
+Dettes suivies — total, pending, done, en retard, montant total
+Remboursements suivis — total
+Dernières consultations — liste avec ID, date, statut (validé / en attente / expiré)
+
+
+💼 Conseiller Financier — /api/dashboard/conseiller/
+
+Son profil — email, username, zone, sous-zone
+Consultations — total des sessions effectuées
+Taux de réponse — % d'OTPs validés par les clients
+Dernières consultations — liste avec ID, date, statut (validé / en attente / expiré)

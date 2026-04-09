@@ -1,5 +1,9 @@
-from django.urls import path
+from rest_framework.routers import DefaultRouter
+from .views import CustomerViewSet, DebtViewSet, RepaymentViewSet
 
-urlpatterns = [
-    # Routes customers uniquement (à ajouter plus tard)
-]
+router = DefaultRouter()
+router.register(r'customers',   CustomerViewSet,   basename='customer')
+router.register(r'debts',       DebtViewSet,       basename='debt')
+router.register(r'repayments',  RepaymentViewSet,  basename='repayment')
+
+urlpatterns = router.urls

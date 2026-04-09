@@ -53,18 +53,9 @@ class BaseStaffSerializer(serializers.ModelSerializer):
 class FrontOfficeSerializer(BaseStaffSerializer):
     class Meta:
         model  = FrontOffice
-        fields = [
-            'id',
-            'email',
-            'username',
-            'zone',
-            'name',       # ✅ ajouté
-            'npi',        # ✅ ajouté
-            'phone',      # ✅ ajouté
-            'is_active',
-        ]
+        fields = ['id', 'email', 'username', 'zone', 'name', 'npi', 'phone', 'is_active']
         extra_kwargs = {
-            'zone':      {'help_text': "ID de la zone"},
+            'zone':      {'help_text': "ID de la zone existante", 'required': True},   # ✅ obligatoire
             'name':      {'help_text': "Nom du front office", 'required': False},
             'npi':       {'help_text': "Numéro de pièce d'identité", 'required': False},
             'phone':     {'help_text': "Numéro de téléphone", 'required': False},
@@ -77,8 +68,7 @@ class FrontOfficeSerializer(BaseStaffSerializer):
         username = validated_data.pop('username')
         user     = self._create_user(email, username, role='front office')
         return FrontOffice.objects.create(user=user, **validated_data)
-
-
+    
 # ─────────────────────────────────────────────
 # HUISSIER
 # ─────────────────────────────────────────────
@@ -86,20 +76,10 @@ class FrontOfficeSerializer(BaseStaffSerializer):
 class HuissierSerializer(BaseStaffSerializer):
     class Meta:
         model  = Huissier
-        fields = [
-            'id',
-            'email',
-            'username',
-            'zone',
-            'subZone',
-            'npi',        # ✅ ajouté
-            'phone',      # ✅ ajouté
-            'picture',    # ✅ ajouté
-            'is_active',
-        ]
+        fields = ['id', 'email', 'username', 'zone', 'subZone', 'npi', 'phone', 'picture', 'is_active']
         extra_kwargs = {
-            'zone':      {'help_text': "ID de la zone"},
-            'subZone':   {'help_text': "ID de la sous-zone", 'required': False},
+            'zone':      {'help_text': "ID de la zone", 'required': False, 'read_only': True},  # ✅ auto via front office
+            'subZone':   {'help_text': "ID de la sous-zone existante", 'required': True},        # ✅ obligatoire
             'npi':       {'help_text': "Numéro de pièce d'identité", 'required': False},
             'phone':     {'help_text': "Numéro de téléphone", 'required': False},
             'picture':   {'help_text': "Photo de l'huissier", 'required': False},
@@ -113,29 +93,18 @@ class HuissierSerializer(BaseStaffSerializer):
         user     = self._create_user(email, username, role='huissier')
         return Huissier.objects.create(user=user, **validated_data)
 
-
 # ─────────────────────────────────────────────
 # FINANCIAL ADVISOR
 # ─────────────────────────────────────────────
 
+
 class FinancialAdvisorSerializer(BaseStaffSerializer):
     class Meta:
         model  = FinancialAdvisor
-        fields = [
-            'id',
-            'email',
-            'username',
-            'zone',
-            'subZone',
-            'name',       # ✅ ajouté
-            'npi',        # ✅ ajouté
-            'phone',      # ✅ ajouté
-            'picture',    # ✅ ajouté
-            'is_active',
-        ]
+        fields = ['id', 'email', 'username', 'zone', 'subZone', 'name', 'npi', 'phone', 'picture', 'is_active']
         extra_kwargs = {
-            'zone':      {'help_text': "ID de la zone"},
-            'subZone':   {'help_text': "ID de la sous-zone", 'required': False},
+            'zone':      {'help_text': "ID de la zone", 'required': False, 'read_only': True},  # ✅ auto via front office
+            'subZone':   {'help_text': "ID de la sous-zone existante", 'required': True},        # ✅ obligatoire
             'name':      {'help_text': "Nom du conseiller", 'required': False},
             'npi':       {'help_text': "Numéro de pièce d'identité", 'required': False},
             'phone':     {'help_text': "Numéro de téléphone", 'required': False},

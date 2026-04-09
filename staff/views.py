@@ -1,9 +1,13 @@
-from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated, BasePermission, SAFE_METHODS
+from rest_framework import viewsets, status
+from rest_framework.permissions import IsAuthenticated, BasePermission
+from rest_framework.response import Response
+from rest_framework.exceptions import PermissionDenied
+
 from drf_spectacular.utils import extend_schema_view, extend_schema, OpenApiResponse
 
 from .models import FrontOffice, Huissier, FinancialAdvisor
 from .serializers import FrontOfficeSerializer, HuissierSerializer, FinancialAdvisorSerializer
+from geography.models import SubZone
 
 
 # ─────────────────────────────────────────────
@@ -32,6 +36,29 @@ class IsHuissier(BasePermission):
     """Seul l'huissier."""
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role == 'huissier'
+
+
+# ─────────────────────────────────────────────
+# HELPER — Validation SubZone
+# ─────────────────────────────────────────────
+
+def validate_subzone_belongs_to_front_office(subzone_id, front_office):
+    """
+    Vérifie que la subzone appartient bien
+    à la zone du front office connecté.
+    """
+    if not subzone_id:
+        return None, None
+
+    try:
+        subzone = SubZone.objects.get(id=subzone_id)
+    except SubZone.DoesNotExist:
+        return None, "Sous-zone introuvable."
+
+    if subzone.zone != front_office.zone:
+        return None, "Cette sous-zone n'appartient pas à votre zone."
+
+    return subzone, None
 
 
 # ─────────────────────────────────────────────
@@ -70,12 +97,13 @@ class IsHuissier(BasePermission):
     ),
 )
 class FrontOfficeViewSet(viewsets.ModelViewSet):
-    serializer_class = FrontOfficeSerializer
+    serializer_class   = FrontOfficeSerializer
+    lookup_value_regex = r'\d+'
 
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            return [IsCountryRepresentant()]  # ✅ seul le représentant pays
-        return [IsAuthenticated()]            # lecture pour tous les authentifiés
+            return [IsCountryRepresentant()]
+        return [IsAuthenticated()]
 
     def get_queryset(self):
         user = self.request.user
@@ -84,11 +112,14 @@ class FrontOfficeViewSet(viewsets.ModelViewSet):
             return FrontOffice.objects.all()
 
         if user.role == 'country':
-            # Le représentant voit seulement les front offices de son pays
-            return FrontOffice.objects.filter(zone__country=user.country)
+            from geography.models import Country
+            try:
+                country = Country.objects.get(manager=user)
+                return FrontOffice.objects.filter(zone__country=country)
+            except Country.DoesNotExist:
+                return FrontOffice.objects.none()
 
         if user.role == 'front office':
-            # Le front office se voit lui-même
             return FrontOffice.objects.filter(user=user)
 
         return FrontOffice.objects.none()
@@ -97,6 +128,7 @@ class FrontOfficeViewSet(viewsets.ModelViewSet):
 # ─────────────────────────────────────────────
 # HUISSIER
 # Créé par : Front Office
+# SubZone doit appartenir à la Zone du Front Office
 # ─────────────────────────────────────────────
 
 @extend_schema_view(
@@ -112,7 +144,7 @@ class FrontOfficeViewSet(viewsets.ModelViewSet):
     create=extend_schema(
         tags=["Staff - Huissier"],
         summary="Créer un huissier",
-        description="Réservé au front office uniquement.",
+        description="Réservé au front office. La subZone doit appartenir à sa zone.",
     ),
     update=extend_schema(
         tags=["Staff - Huissier"],
@@ -130,11 +162,12 @@ class FrontOfficeViewSet(viewsets.ModelViewSet):
     ),
 )
 class HuissierViewSet(viewsets.ModelViewSet):
-    serializer_class = HuissierSerializer
+    serializer_class   = HuissierSerializer
+    lookup_value_regex = r'\d+'
 
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            return [IsFrontOffice()]   # ✅ seul le front office
+            return [IsFrontOffice()]
         return [IsAuthenticated()]
 
     def get_queryset(self):
@@ -144,25 +177,53 @@ class HuissierViewSet(viewsets.ModelViewSet):
             return Huissier.objects.all()
 
         if user.role == 'country':
-            return Huissier.objects.filter(zone__country=user.country)
+            from geography.models import Country
+            try:
+                country = Country.objects.get(manager=user)
+                return Huissier.objects.filter(zone__country=country)
+            except Country.DoesNotExist:
+                return Huissier.objects.none()
 
         if user.role == 'front office':
-            # Le front office voit les huissiers de sa zone
             front_office = FrontOffice.objects.filter(user=user).first()
             if front_office:
                 return Huissier.objects.filter(zone=front_office.zone)
+            return Huissier.objects.none()
 
         if user.role == 'huissier':
-            # L'huissier se voit lui-même
             return Huissier.objects.filter(user=user)
 
         return Huissier.objects.none()
+
+    def create(self, request, *args, **kwargs):
+        # ✅ Vérifier que la subZone appartient à la zone du front office
+        front_office = FrontOffice.objects.filter(user=request.user).first()
+        if not front_office:
+            return Response(
+                {"error": "Vous n'êtes associé à aucun front office."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        subzone_id = request.data.get('subZone')
+        if subzone_id:
+            _, error = validate_subzone_belongs_to_front_office(subzone_id, front_office)
+            if error:
+                return Response({"error": error}, status=status.HTTP_400_BAD_REQUEST)
+
+        # ✅ Forcer la zone du front office
+        data = request.data.copy()
+        data['zone'] = front_office.zone.id
+
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 # ─────────────────────────────────────────────
 # FINANCIAL ADVISOR
 # Créé par : Front Office
-# Consulte uniquement les clients (pas de création)
+# SubZone doit appartenir à la Zone du Front Office
 # ─────────────────────────────────────────────
 
 @extend_schema_view(
@@ -178,7 +239,7 @@ class HuissierViewSet(viewsets.ModelViewSet):
     create=extend_schema(
         tags=["Staff - Conseiller Financier"],
         summary="Créer un conseiller financier",
-        description="Réservé au front office uniquement.",
+        description="Réservé au front office. La subZone doit appartenir à sa zone.",
     ),
     update=extend_schema(
         tags=["Staff - Conseiller Financier"],
@@ -196,11 +257,12 @@ class HuissierViewSet(viewsets.ModelViewSet):
     ),
 )
 class FinancialAdvisorViewSet(viewsets.ModelViewSet):
-    serializer_class = FinancialAdvisorSerializer
+    serializer_class   = FinancialAdvisorSerializer
+    lookup_value_regex = r'\d+'
 
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            return [IsFrontOffice()]   # ✅ seul le front office
+            return [IsFrontOffice()]
         return [IsAuthenticated()]
 
     def get_queryset(self):
@@ -210,30 +272,44 @@ class FinancialAdvisorViewSet(viewsets.ModelViewSet):
             return FinancialAdvisor.objects.all()
 
         if user.role == 'country':
-            return FinancialAdvisor.objects.filter(zone__country=user.country)
+            from geography.models import Country
+            try:
+                country = Country.objects.get(manager=user)
+                return FinancialAdvisor.objects.filter(zone__country=country)
+            except Country.DoesNotExist:
+                return FinancialAdvisor.objects.none()
 
         if user.role == 'front office':
-            # Le front office voit les conseillers de sa zone
             front_office = FrontOffice.objects.filter(user=user).first()
             if front_office:
                 return FinancialAdvisor.objects.filter(zone=front_office.zone)
+            return FinancialAdvisor.objects.none()
 
         if user.role == 'conseiller':
-            # Le conseiller se voit lui-même
             return FinancialAdvisor.objects.filter(user=user)
 
         return FinancialAdvisor.objects.none()
-    
-class FrontOfficeViewSet(viewsets.ModelViewSet):
-    serializer_class   = FrontOfficeSerializer
-    lookup_value_regex = r'\d+'  # ✅
-    ...
 
-class HuissierViewSet(viewsets.ModelViewSet):
-    serializer_class   = HuissierSerializer
-    lookup_value_regex = r'\d+'  # ✅
-    ...
+    def create(self, request, *args, **kwargs):
+        # ✅ Vérifier que la subZone appartient à la zone du front office
+        front_office = FrontOffice.objects.filter(user=request.user).first()
+        if not front_office:
+            return Response(
+                {"error": "Vous n'êtes associé à aucun front office."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-class FinancialAdvisorViewSet(viewsets.ModelViewSet):
-    serializer_class   = FinancialAdvisorSerializer
-    lookup_value_regex = r'\d+'  # ✅
+        subzone_id = request.data.get('subZone')
+        if subzone_id:
+            _, error = validate_subzone_belongs_to_front_office(subzone_id, front_office)
+            if error:
+                return Response({"error": error}, status=status.HTTP_400_BAD_REQUEST)
+
+        # ✅ Forcer la zone du front office
+        data = request.data.copy()
+        data['zone'] = front_office.zone.id
+
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)

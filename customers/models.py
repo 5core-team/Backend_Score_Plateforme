@@ -7,7 +7,7 @@ from staff.models import Huissier
 
 
 class Customer(models.Model):
-    uuid         = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)  # ✅ auto-généré
+    uuid         = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     first_name   = models.CharField(max_length=100)
     last_name    = models.CharField(max_length=100)
     email        = models.EmailField(max_length=50)
@@ -16,8 +16,8 @@ class Customer(models.Model):
     credit_score = models.FloatField(default=0.0)
 
     # Geography
-    zone     = models.ForeignKey(Zone,    on_delete=models.SET_NULL, null=True, related_name="customers")
-    subZone  = models.ForeignKey(SubZone, on_delete=models.SET_NULL, null=True, related_name="customers")  # ✅ faute corrigée
+    zone    = models.ForeignKey(Zone,    on_delete=models.SET_NULL, null=True, related_name="customers")
+    subZone = models.ForeignKey(SubZone, on_delete=models.SET_NULL, null=True, related_name="customers")
 
     # Staff
     huissier = models.ForeignKey(Huissier, on_delete=models.SET_NULL, null=True, related_name="customers")
@@ -31,7 +31,7 @@ class Customer(models.Model):
 
     @property
     def country(self):
-        return self.zone.country if self.zone else None  # ✅ via zone
+        return self.zone.country if self.zone else None
 
     def __str__(self):
         return f"{self.full_name} ({self.npi})"
@@ -40,6 +40,60 @@ class Customer(models.Model):
         verbose_name        = "Client"
         verbose_name_plural = "Clients"
 
+
+# ─────────────────────────────────────────────
+# OTP — Autorisation de consultation du compte
+# ─────────────────────────────────────────────
+
+class ConsultationOTP(models.Model):
+    customer    = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='otps')
+    code        = models.CharField(max_length=6)
+    created_at  = models.DateTimeField(auto_now_add=True)
+    expiry_date = models.DateTimeField()
+    is_used     = models.BooleanField(default=False)
+
+    def is_valid(self):
+        return not self.is_used and timezone.now() < self.expiry_date
+
+    def __str__(self):
+        return f"OTP({self.customer.full_name} - {self.code})"
+
+    class Meta:
+        verbose_name        = "OTP de consultation"
+        verbose_name_plural = "OTPs de consultation"
+
+
+# ─────────────────────────────────────────────
+# SESSION DE CONSULTATION
+# ─────────────────────────────────────────────
+
+class ConsultationSession(models.Model):
+    """
+    Session ouverte après validation OTP.
+    Permet à l'huissier ou conseiller d'accéder au compte client.
+    Valable 30 minutes.
+    """
+    customer    = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='sessions')
+    token       = models.UUIDField(default=uuid.uuid4, unique=True)
+    created_by  = models.ForeignKey('accounts.ScoreUser', on_delete=models.CASCADE)
+    created_at  = models.DateTimeField(auto_now_add=True)
+    expiry_date = models.DateTimeField()
+    is_active   = models.BooleanField(default=True)
+
+    def is_valid(self):
+        return self.is_active and timezone.now() < self.expiry_date
+
+    def __str__(self):
+        return f"Session({self.customer.full_name} - {self.created_by.email})"
+
+    class Meta:
+        verbose_name        = "Session de consultation"
+        verbose_name_plural = "Sessions de consultation"
+
+
+# ─────────────────────────────────────────────
+# DEBT
+# ─────────────────────────────────────────────
 
 class Debt(models.Model):
     PERIODICITY_CHOICES = [
@@ -74,6 +128,10 @@ class Debt(models.Model):
         verbose_name        = "Dette"
         verbose_name_plural = "Dettes"
 
+
+# ─────────────────────────────────────────────
+# REPAYMENT
+# ─────────────────────────────────────────────
 
 class Repayment(models.Model):
     debt = models.ForeignKey(Debt, on_delete=models.CASCADE, related_name='repayments')
