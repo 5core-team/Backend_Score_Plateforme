@@ -13,7 +13,8 @@ import environ
 # ─────────────────────────────────────────────
 
 env = environ.Env(
-    EMAIL_HOST_PASSWORD=(str, "")
+    EMAIL_HOST_PASSWORD=(str, ""),
+    FRONTEND_URL=(str, "http://localhost:3000"),
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -54,7 +55,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework',
     'drf_spectacular',
-    'django_celery_beat',  # ✅ ajouté pour les tâches planifiées
+    'django_celery_beat',
 ]
 
 
@@ -78,7 +79,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'score.middleware.SubscriptionMiddleware',  # ✅ ajouté
+    'score.middleware.SubscriptionMiddleware',
 ]
 
 ROOT_URLCONF = 'score.urls'
@@ -247,6 +248,13 @@ RESET_TOKEN_EXPIRY_MINUTES = 15      # 15 min
 
 
 # ─────────────────────────────────────────────
+# FRONTEND URL
+# ─────────────────────────────────────────────
+
+FRONTEND_URL = env('FRONTEND_URL')
+
+
+# ─────────────────────────────────────────────
 # CELERY
 # ─────────────────────────────────────────────
 
@@ -258,12 +266,15 @@ CELERY_RESULT_SERIALIZER         = 'json'
 CELERY_TIMEZONE                  = 'UTC'
 CELERY_BEAT_SCHEDULER            = 'django_celery_beat.schedulers:DatabaseScheduler'
 
-# Tâche planifiée — vérification quotidienne des abonnements
 from celery.schedules import crontab
 
 CELERY_BEAT_SCHEDULE = {
     'check-subscriptions-daily': {
         'task':     'geography.tasks.check_subscriptions',
-        'schedule': crontab(hour=0, minute=0),  # ✅ tous les jours à minuit UTC
+        'schedule': crontab(hour=0, minute=0),
+    },
+    'check-debt-deadlines-daily': {         # ✅ ajouté
+        'task':     'customers.tasks.check_debt_deadlines',
+        'schedule': crontab(hour=0, minute=0),
     },
 }

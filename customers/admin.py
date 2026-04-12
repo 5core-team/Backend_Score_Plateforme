@@ -47,11 +47,11 @@ class ConsultationSessionAdmin(admin.ModelAdmin):
 
 @admin.register(Debt)
 class DebtAdmin(admin.ModelAdmin):
-    list_display    = ['customer', 'creditor', 'amount', 'deadline_amount', 'periodicity', 'deadline', 'status', 'verified']
+    list_display    = ['customer', 'creditor', 'amount', 'deadline_amount', 'periodicity', 'deadline', 'status', 'validation_status']  # ✅ verified → validation_status
     search_fields   = ['customer__first_name', 'customer__last_name', 'creditor__first_name']
-    list_filter     = ['status', 'verified', 'periodicity']
+    list_filter     = ['status', 'validation_status', 'periodicity']  # ✅ verified → validation_status
     ordering        = ['-created_at']
-    readonly_fields = ['created_at', 'updated_at']
+    readonly_fields = ['created_at', 'updated_at', 'validation_token', 'validation_token_expiry']  # ✅ ajouté
 
 
 # ─────────────────────────────────────────────
@@ -60,6 +60,8 @@ class DebtAdmin(admin.ModelAdmin):
 
 @admin.register(Repayment)
 class RepaymentAdmin(admin.ModelAdmin):
-    list_display  = ['debt', 'date']
-    search_fields = ['debt__customer__first_name', 'debt__customer__last_name']
-    ordering      = ['-date']
+    list_display    = ['debt', 'date', 'validation_status']  # ✅ validation_status ajouté
+    search_fields   = ['debt__customer__first_name', 'debt__customer__last_name']
+    list_filter     = ['validation_status']  # ✅ ajouté
+    ordering        = ['-date']
+    readonly_fields = ['validation_token', 'validation_token_expiry']  # ✅ ajouté

@@ -1,9 +1,12 @@
 from django.db import models
 from django.utils import timezone
 import uuid
+import secrets
 
 from geography.models import Zone, SubZone
 from staff.models import Huissier
+from drf_spectacular.utils import extend_schema_field  # ✅ ajouté
+from drf_spectacular.types import OpenApiTypes          # ✅ ajouté
 
 
 class Customer(models.Model):
@@ -68,11 +71,6 @@ class ConsultationOTP(models.Model):
 # ─────────────────────────────────────────────
 
 class ConsultationSession(models.Model):
-    """
-    Session ouverte après validation OTP.
-    Permet à l'huissier ou conseiller d'accéder au compte client.
-    Valable 30 minutes.
-    """
     customer    = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='sessions')
     token       = models.UUIDField(default=uuid.uuid4, unique=True)
     created_by  = models.ForeignKey('accounts.ScoreUser', on_delete=models.CASCADE)
@@ -96,6 +94,7 @@ class ConsultationSession(models.Model):
 # ─────────────────────────────────────────────
 
 class Debt(models.Model):
+
     PERIODICITY_CHOICES = [
         ('daily',     'Daily'),
         ('weekly',    'Weekly'),
@@ -110,16 +109,62 @@ class Debt(models.Model):
         ('done',    'Done'),
     ]
 
+    VALIDATION_STATUS_CHOICES = [
+        ('pending',   'En attente de validation'),
+        ('validated', 'Validée par le client'),
+        ('rejected',  'Refusée par le client'),
+    ]
+
     customer        = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, related_name='debts')
     creditor        = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, related_name="receivables")
     amount          = models.DecimalField(max_digits=10, decimal_places=2)
     deadline_amount = models.DecimalField(max_digits=10, decimal_places=2)
     periodicity     = models.CharField(max_length=20, choices=PERIODICITY_CHOICES)
     deadline        = models.DateField()
-    verified        = models.BooleanField(default=False)
     status          = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
     created_at      = models.DateField(auto_now_add=True)
     updated_at      = models.DateField(auto_now=True)
+
+    validation_status = models.CharField(
+        max_length=10,
+        choices=VALIDATION_STATUS_CHOICES,
+        default='pending',
+        verbose_name="Statut de validation"
+    )
+
+    validation_token        = models.CharField(max_length=100, null=True, blank=True, unique=True)
+    validation_token_expiry = models.DateTimeField(null=True, blank=True)
+    # ✅ Suivi et alertes
+    is_monitored    = models.BooleanField(default=False, verbose_name="Suivi activé")
+    last_alert_sent = models.DateField(null=True, blank=True, verbose_name="Dernière alerte envoyée")
+
+    @property
+    @extend_schema_field(OpenApiTypes.BOOL)  # ✅ ajouté
+    def verified(self) -> bool:
+        """Rétrocompatibilité — True si validée par le client."""
+        return self.validation_status == 'validated'
+
+    def is_editable(self):
+        return self.validation_status != 'validated'
+
+    def generate_validation_token(self):
+        self.validation_token        = secrets.token_urlsafe(32)
+        self.validation_token_expiry = timezone.now() + timezone.timedelta(days=7)
+        self.validation_status       = 'pending'
+        self.save(update_fields=[
+            'validation_token',
+            'validation_token_expiry',
+            'validation_status',
+        ])
+        return self.validation_token
+
+    def is_validation_token_valid(self):
+        return (
+            self.validation_token is not None and
+            self.validation_token_expiry is not None and
+            timezone.now() < self.validation_token_expiry and
+            self.validation_status == 'pending'
+        )
 
     def __str__(self):
         return f"Debt({self.customer} → {self.creditor} : {self.amount})"
@@ -134,8 +179,53 @@ class Debt(models.Model):
 # ─────────────────────────────────────────────
 
 class Repayment(models.Model):
+
+    VALIDATION_STATUS_CHOICES = [
+        ('pending',   'En attente de validation'),
+        ('validated', 'Validé par le client'),
+        ('rejected',  'Refusé par le client'),
+    ]
+
     debt = models.ForeignKey(Debt, on_delete=models.CASCADE, related_name='repayments')
     date = models.DateField()
+
+    validation_status = models.CharField(
+        max_length=10,
+        choices=VALIDATION_STATUS_CHOICES,
+        default='pending',
+        verbose_name="Statut de validation"
+    )
+
+    validation_token        = models.CharField(max_length=100, null=True, blank=True, unique=True)
+    validation_token_expiry = models.DateTimeField(null=True, blank=True)
+
+    @property
+    @extend_schema_field(OpenApiTypes.BOOL)  # ✅ ajouté
+    def verified(self) -> bool:
+        """Rétrocompatibilité — True si validé par le client."""
+        return self.validation_status == 'validated'
+
+    def is_editable(self):
+        return self.validation_status != 'validated'
+
+    def generate_validation_token(self):
+        self.validation_token        = secrets.token_urlsafe(32)
+        self.validation_token_expiry = timezone.now() + timezone.timedelta(days=7)
+        self.validation_status       = 'pending'
+        self.save(update_fields=[
+            'validation_token',
+            'validation_token_expiry',
+            'validation_status',
+        ])
+        return self.validation_token
+
+    def is_validation_token_valid(self):
+        return (
+            self.validation_token is not None and
+            self.validation_token_expiry is not None and
+            timezone.now() < self.validation_token_expiry and
+            self.validation_status == 'pending'
+        )
 
     def __str__(self):
         return f"Repayment on {self.date} for Debt #{self.debt.id}"
