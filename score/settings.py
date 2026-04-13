@@ -13,7 +13,8 @@ import environ
 # ─────────────────────────────────────────────
 
 env = environ.Env(
-    EMAIL_HOST_PASSWORD=(str, "")
+    EMAIL_HOST_PASSWORD=(str, ""),
+    FRONTEND_URL=(str, "http://localhost:3000"),
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -53,16 +54,18 @@ INSTALLED_APPS = [
     'staff',
     'geography',
     'customers',
+    'dashboard',
 
     # Packages tiers
     'corsheaders',
     'rest_framework',
     'drf_spectacular',
+    'django_celery_beat',
 ]
 
 
 # ─────────────────────────────────────────────
-# MODÈLE UTILISATEUR PERSONNALISÉ  ✅ décommenté
+# MODÈLE UTILISATEUR PERSONNALISÉ
 # ─────────────────────────────────────────────
 
 AUTH_USER_MODEL = 'accounts.ScoreUser'
@@ -81,6 +84,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'score.middleware.SubscriptionMiddleware',
 ]
 
 ROOT_URLCONF = 'score.urls'
@@ -134,7 +138,7 @@ DATABASES = {
 
 
 # ─────────────────────────────────────────────
-# VALIDATION DES MOTS DE PASSE  ✅ dupliqué supprimé
+# VALIDATION DES MOTS DE PASSE
 # ─────────────────────────────────────────────
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -183,17 +187,15 @@ REST_FRAMEWORK = {
 
 
 # ─────────────────────────────────────────────
-# DRF SPECTACULAR (Swagger)  ✅ COMPONENTS corrigé
+# DRF SPECTACULAR (Swagger)
 # ─────────────────────────────────────────────
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Score API',
-    'DESCRIPTION': "Documentation de l'API du projet Score",  # ✅ guillemets corrigés
+    'DESCRIPTION': "Documentation de l'API du projet Score",
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
     'COMPONENT_SPLIT_REQUEST': True,
-
-    # JWT dans Swagger UI  ✅ COMPONENTS et non SECURITY_SCHEMES
     'SECURITY': [{'Bearer': []}],
     'COMPONENTS': {
         'securitySchemes': {
@@ -254,3 +256,36 @@ EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")
 
 SETUP_TOKEN_EXPIRY_MINUTES = 1440    # 24h
 RESET_TOKEN_EXPIRY_MINUTES = 15      # 15 min
+
+
+# ─────────────────────────────────────────────
+# FRONTEND URL
+# ─────────────────────────────────────────────
+
+FRONTEND_URL = env('FRONTEND_URL')
+
+
+# ─────────────────────────────────────────────
+# CELERY
+# ─────────────────────────────────────────────
+
+CELERY_BROKER_URL                = 'redis://127.0.0.1:6379/0'
+CELERY_RESULT_BACKEND            = 'redis://127.0.0.1:6379/0'
+CELERY_ACCEPT_CONTENT            = ['json']
+CELERY_TASK_SERIALIZER           = 'json'
+CELERY_RESULT_SERIALIZER         = 'json'
+CELERY_TIMEZONE                  = 'UTC'
+CELERY_BEAT_SCHEDULER            = 'django_celery_beat.schedulers:DatabaseScheduler'
+
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+    'check-subscriptions-daily': {
+        'task':     'geography.tasks.check_subscriptions',
+        'schedule': crontab(hour=0, minute=0),
+    },
+    'check-debt-deadlines-daily': {         # ✅ ajouté
+        'task':     'customers.tasks.check_debt_deadlines',
+        'schedule': crontab(hour=0, minute=0),
+    },
+}
