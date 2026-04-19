@@ -22,7 +22,6 @@ class CustomerSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Customer
         fields = [
-            'id',
             'uuid',
             'first_name',
             'last_name',
@@ -60,7 +59,7 @@ class CustomerSearchSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = Customer
-        fields = ['id', 'uuid', 'full_name', 'npi', 'email', 'phone_number']
+        fields = ['uuid', 'full_name', 'npi', 'email', 'phone_number']
 
 
 # ─────────────────────────────────────────────
@@ -68,18 +67,17 @@ class CustomerSearchSerializer(serializers.ModelSerializer):
 # ─────────────────────────────────────────────
 
 class ConsultationOTPRequestSerializer(serializers.Serializer):
-    customer_id = serializers.IntegerField(help_text="ID du client à consulter")
+    customer_uuid = serializers.UUIDField(help_text="UUID du client à consulter")  # ✅
 
-    def validate_customer_id(self, value):
-        if not Customer.objects.filter(id=value).exists():
+    def validate_customer_uuid(self, value):
+        if not Customer.objects.filter(uuid=value).exists():
             raise serializers.ValidationError("Client introuvable.")
         return value
 
     def send_otp(self):
-        customer_id = self.validated_data['customer_id']
-        customer    = Customer.objects.get(id=customer_id)
+        customer_uuid = self.validated_data['customer_uuid']
+        customer      = Customer.objects.get(uuid=customer_uuid)
 
-        # Vérifier délai de 60s entre deux OTP
         last_otp = ConsultationOTP.objects.filter(
             customer=customer,
             is_used=False
@@ -90,7 +88,6 @@ class ConsultationOTPRequestSerializer(serializers.Serializer):
                 {"error": "Veuillez attendre avant de demander un nouveau code."}
             )
 
-        # Générer le code OTP à 6 chiffres
         code        = str(random.randint(100000, 999999))
         expiry_mins = getattr(settings, "CONSULTATION_OTP_EXPIRY_MINUTES", 10)
 
@@ -100,7 +97,6 @@ class ConsultationOTPRequestSerializer(serializers.Serializer):
             expiry_date=timezone.now() + timedelta(minutes=expiry_mins),
         )
 
-        # Envoyer le code par mail au client
         send_email({
             "subject": "Code d'autorisation de consultation Score",
             "message": (
@@ -122,17 +118,17 @@ class ConsultationOTPRequestSerializer(serializers.Serializer):
 # ─────────────────────────────────────────────
 
 class ConsultationOTPVerifySerializer(serializers.Serializer):
-    customer_id = serializers.IntegerField(help_text="ID du client")
-    code        = serializers.CharField(max_length=6, help_text="Code OTP reçu par le client")
+    customer_uuid = serializers.UUIDField(help_text="UUID du client")  # ✅
+    code          = serializers.CharField(max_length=6, help_text="Code OTP reçu par le client")
 
     def validate(self, attrs):
-        customer_id = attrs.get('customer_id')
-        code        = attrs.get('code')
+        customer_uuid = attrs.get('customer_uuid')
+        code          = attrs.get('code')
 
         try:
-            customer = Customer.objects.get(id=customer_id)
+            customer = Customer.objects.get(uuid=customer_uuid)
         except Customer.DoesNotExist:
-            raise serializers.ValidationError({"customer_id": "Client introuvable."})
+            raise serializers.ValidationError({"customer_uuid": "Client introuvable."})
 
         otp = ConsultationOTP.objects.filter(
             customer=customer,
@@ -187,10 +183,16 @@ class ConsultationSessionSerializer(serializers.ModelSerializer):
 class RepaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Repayment
-        fields = ['id', 'debt', 'date']
+        fields = [
+            'id',
+            'debt',
+            'date',
+            'validation_status',  # ✅ ajouté
+        ]
         extra_kwargs = {
-            'debt': {'help_text': "ID de la dette"},
-            'date': {'help_text': "Date du remboursement"},
+            'debt':              {'help_text': "ID de la dette"},
+            'date':              {'help_text': "Date du remboursement"},
+            'validation_status': {'read_only': True, 'help_text': "Statut de validation"},
         }
 
 
@@ -201,6 +203,7 @@ class RepaymentSerializer(serializers.ModelSerializer):
 class DebtSerializer(serializers.ModelSerializer):
     repayments    = RepaymentSerializer(many=True, read_only=True)
     customer_name = serializers.CharField(source='customer.full_name', read_only=True)
+    customer_uuid = serializers.UUIDField(source='customer.uuid', read_only=True)  # ✅
     creditor_name = serializers.CharField(source='creditor.full_name', read_only=True)
 
     class Meta:
@@ -208,6 +211,7 @@ class DebtSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'customer',
+            'customer_uuid',     # ✅
             'customer_name',
             'creditor',
             'creditor_name',
@@ -217,19 +221,23 @@ class DebtSerializer(serializers.ModelSerializer):
             'deadline',
             'verified',
             'status',
+            'validation_status', # ✅
+            'is_monitored',      # ✅
             'created_at',
             'updated_at',
             'repayments',
         ]
         extra_kwargs = {
-            'customer':        {'write_only': True, 'help_text': "ID du client débiteur"},
-            'creditor':        {'write_only': True, 'help_text': "ID du client créditeur", 'required': False},
-            'amount':          {'help_text': "Montant de la dette"},
-            'deadline_amount': {'help_text': "Montant dû à l'échéance"},
-            'periodicity':     {'help_text': "Périodicité de remboursement"},
-            'deadline':        {'help_text': "Date limite de remboursement"},
-            'verified':        {'help_text': "Dette vérifiée ou non"},
-            'status':          {'help_text': "Statut : pending ou done"},
-            'created_at':      {'read_only': True},
-            'updated_at':      {'read_only': True},
+            'customer':          {'write_only': True, 'help_text': "ID du client débiteur"},
+            'creditor':          {'write_only': True, 'help_text': "ID du client créditeur", 'required': False},
+            'amount':            {'help_text': "Montant de la dette"},
+            'deadline_amount':   {'help_text': "Montant dû à l'échéance"},
+            'periodicity':       {'help_text': "Périodicité de remboursement"},
+            'deadline':          {'help_text': "Date limite de remboursement"},
+            'verified':          {'read_only': True, 'help_text': "Dette vérifiée ou non"},
+            'status':            {'help_text': "Statut : pending ou done"},
+            'validation_status': {'read_only': True, 'help_text': "Statut de validation"},
+            'is_monitored':      {'read_only': True, 'help_text': "Suivi activé ou non"},
+            'created_at':        {'read_only': True},
+            'updated_at':        {'read_only': True},
         }

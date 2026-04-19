@@ -20,7 +20,7 @@ from .permissions import IsSuperAdmin
     tags=["Dashboard"],
     summary="Dashboard Super Admin",
     description="Retourne toutes les statistiques globales de la plateforme. Réservé au super admin.",
-    responses=None,  # ✅
+    responses=None,
 )
 class SuperAdminDashboardView(APIView):
     permission_classes = [IsSuperAdmin]
@@ -63,8 +63,8 @@ class SuperAdminDashboardView(APIView):
         total_debts         = debts_qs.count()
         pending_debts       = debts_qs.filter(status='pending').count()
         done_debts          = debts_qs.filter(status='done').count()
-        verified_debts      = debts_qs.filter(verified=True).count()
-        unverified_debts    = total_debts - verified_debts
+        verified_debts      = debts_qs.filter(validation_status='validated').count()          # ✅
+        unverified_debts    = debts_qs.filter(validation_status__in=['pending', 'rejected']).count()  # ✅
         overdue_debts       = debts_qs.filter(status='pending', deadline__lt=now.date()).count()
         total_debt_amount   = debts_qs.aggregate(total=Sum('amount'))['total'] or 0
         pending_debt_amount = debts_qs.filter(status='pending').aggregate(total=Sum('amount'))['total'] or 0
@@ -122,7 +122,7 @@ class SuperAdminDashboardView(APIView):
     tags=["Dashboard"],
     summary="Dashboard Représentant Pays",
     description="Retourne les statistiques du pays géré par le représentant connecté.",
-    responses=None,  # ✅
+    responses=None,
 )
 class CountryDashboardView(APIView):
     permission_classes = [IsAuthenticated]
@@ -144,8 +144,7 @@ class CountryDashboardView(APIView):
                 status=404
             )
 
-        # ✅ subscription (OneToOne) et non subscriptions (FK)
-        subscription     = getattr(country, 'subscription', None)
+        subscription      = getattr(country, 'subscription', None)
         subscription_info = {
             "is_active":  subscription.is_active() if subscription else False,
             "expires_in": subscription.expires_in if subscription else None,
@@ -182,8 +181,8 @@ class CountryDashboardView(APIView):
         pending_debts       = debts_qs.filter(status='pending').count()
         done_debts          = debts_qs.filter(status='done').count()
         overdue_debts       = debts_qs.filter(status='pending', deadline__lt=now.date()).count()
-        verified_debts      = debts_qs.filter(verified=True).count()
-        unverified_debts    = total_debts - verified_debts
+        verified_debts      = debts_qs.filter(validation_status='validated').count()                  # ✅
+        unverified_debts    = debts_qs.filter(validation_status__in=['pending', 'rejected']).count()  # ✅
         total_debt_amount   = debts_qs.aggregate(total=Sum('amount'))['total'] or 0
         pending_debt_amount = debts_qs.filter(status='pending').aggregate(total=Sum('amount'))['total'] or 0
 
@@ -248,7 +247,7 @@ class CountryDashboardView(APIView):
     tags=["Dashboard"],
     summary="Dashboard Front Office",
     description="Retourne les statistiques de la zone gérée par le front office connecté.",
-    responses=None,  # ✅
+    responses=None,
 )
 class FrontOfficeDashboardView(APIView):
     permission_classes = [IsAuthenticated]
@@ -298,8 +297,8 @@ class FrontOfficeDashboardView(APIView):
         pending_debts       = debts_qs.filter(status='pending').count()
         done_debts          = debts_qs.filter(status='done').count()
         overdue_debts       = debts_qs.filter(status='pending', deadline__lt=now.date()).count()
-        verified_debts      = debts_qs.filter(verified=True).count()
-        unverified_debts    = total_debts - verified_debts
+        verified_debts      = debts_qs.filter(validation_status='validated').count()                  # ✅
+        unverified_debts    = debts_qs.filter(validation_status__in=['pending', 'rejected']).count()  # ✅
         total_debt_amount   = debts_qs.aggregate(total=Sum('amount'))['total'] or 0
         pending_debt_amount = debts_qs.filter(status='pending').aggregate(total=Sum('amount'))['total'] or 0
 
@@ -364,7 +363,7 @@ class FrontOfficeDashboardView(APIView):
     tags=["Dashboard"],
     summary="Dashboard Huissier",
     description="Retourne les statistiques de l'huissier connecté.",
-    responses=None,  # ✅
+    responses=None,
 )
 class HuissierDashboardView(APIView):
     permission_classes = [IsAuthenticated]
@@ -390,7 +389,7 @@ class HuissierDashboardView(APIView):
 
         debts_qs        = Debt.objects.filter(customer__huissier=huissier)
         total_debts     = debts_qs.count()
-        verified_debts  = debts_qs.filter(verified=True).count()
+        verified_debts  = debts_qs.filter(validation_status='validated').count()  # ✅
         taux_de_reponse = round((verified_debts / total_debts * 100), 1) if total_debts > 0 else 0
 
         total_consultations = ConsultationSession.objects.filter(
@@ -483,7 +482,7 @@ class HuissierDashboardView(APIView):
     tags=["Dashboard"],
     summary="Dashboard Conseiller Financier",
     description="Retourne les statistiques du conseiller financier connecté.",
-    responses=None,  # ✅
+    responses=None,
 )
 class FinancialAdvisorDashboardView(APIView):
     permission_classes = [IsAuthenticated]
