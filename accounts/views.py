@@ -13,22 +13,18 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework import status, generics
 from rest_framework_simplejwt.tokens import RefreshToken
-# Trouvez cette ligne dans accounts/views.py
-from .models import ScoreUser, AccountCredentials
-from accounts.utils import send_email
 
-# Remplacez par ✅
-from .models import ScoreUser, AccountCredentials, PasswordResetCodeModel
-from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiResponse, OpenApiExample
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiResponse
 from drf_spectacular.types import OpenApiTypes
 
+from .models import ScoreUser, AccountCredentials, PasswordResetCodeModel  # ✅ imports nettoyés
 from .serializers import (
     LoginSerializer,
     LoginResponseSerializer,
     UserProfileSerializer,
     ErrorSerializer,
 )
-from .models import ScoreUser, AccountCredentials
+from accounts.utils import send_email
 
 import random
 import uuid
@@ -57,7 +53,7 @@ class Login(APIView):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        email = serializer.validated_data.get("email")
+        email    = serializer.validated_data.get("email")
         password = serializer.validated_data.get("password")
 
         user = authenticate(request, username=email, password=password)
@@ -70,9 +66,9 @@ class Login(APIView):
 
         refresh = RefreshToken.for_user(user)
         return Response({
-            "access_token": str(refresh.access_token),
+            "access_token":  str(refresh.access_token),
             "refresh_token": str(refresh),
-            "type_user": user.role
+            "type_user":     user.role
         }, status=status.HTTP_200_OK)
 
 
@@ -87,7 +83,7 @@ class VerifyPasswordSetupCredentials(APIView):
         summary="Vérifier les credentials pour setup du mot de passe",
         description="Vérifie si le uid et le token sont valides avant de permettre à l'utilisateur de définir son mot de passe.",
         parameters=[
-            OpenApiParameter(name="uid", type=OpenApiTypes.STR, location=OpenApiParameter.QUERY, required=True),
+            OpenApiParameter(name="uid",   type=OpenApiTypes.STR, location=OpenApiParameter.QUERY, required=True),
             OpenApiParameter(name="token", type=OpenApiTypes.STR, location=OpenApiParameter.QUERY, required=True),
         ],
         responses={
@@ -96,7 +92,7 @@ class VerifyPasswordSetupCredentials(APIView):
         },
     )
     def get(self, request):
-        uid = request.query_params.get("uid")
+        uid   = request.query_params.get("uid")
         token = request.query_params.get("token")
 
         if not uid or not token:
@@ -104,7 +100,7 @@ class VerifyPasswordSetupCredentials(APIView):
 
         try:
             user_id = force_str(urlsafe_base64_decode(uid))
-            user = get_object_or_404(ScoreUser, pk=user_id)
+            user    = get_object_or_404(ScoreUser, pk=user_id)
         except Exception:
             return Response({"error": "Invalid uid"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -146,8 +142,8 @@ class PasswordSetup(APIView):
         },
     )
     def post(self, request):
-        uid = request.data.get("uid")
-        token = request.data.get("token")
+        uid      = request.data.get("uid")
+        token    = request.data.get("token")
         password = request.data.get("password")
 
         if not uid or not token or not password:
@@ -155,7 +151,7 @@ class PasswordSetup(APIView):
 
         try:
             user_id = force_str(urlsafe_base64_decode(uid))
-            user = get_object_or_404(ScoreUser, pk=user_id)
+            user    = get_object_or_404(ScoreUser, pk=user_id)
         except Exception:
             return Response({"error": "Invalid uid"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -206,9 +202,8 @@ class PasswordResetCode(APIView):
         if not email:
             return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        user = get_object_or_404(ScoreUser, email=email)
-
-        today = timezone.now().date()
+        user       = get_object_or_404(ScoreUser, email=email)
+        today      = timezone.now().date()
         codes_today = PasswordResetCodeModel.objects.filter(user=user, created_at__date=today)
 
         if codes_today.count() >= 4:
@@ -225,14 +220,12 @@ class PasswordResetCode(APIView):
             )
 
         code = str(random.randint(100000, 999999))
-
         PasswordResetCodeModel.objects.create(
             user=user,
             code=code,
             expiry_date=timezone.now() + timedelta(minutes=10)
         )
 
-        # Envoyer le code par mail
         send_email({
             "subject": "Code de réinitialisation Score",
             "message": f"Bonjour {user.username},\n\nVotre code de réinitialisation est : {code}\n\nCe code est valable 10 minutes.",
@@ -240,6 +233,7 @@ class PasswordResetCode(APIView):
         })
 
         return Response({"msg": "Reset code generated successfully"}, status=status.HTTP_200_OK)
+
 
 # ─────────────────────────────────────────────
 # VERIFY VALIDATION CODE
@@ -271,32 +265,20 @@ class VerifyValidationCode(APIView):
         code  = request.data.get("code")
 
         if not email or not code:
-            return Response(
-                {"error": "Missing parameters"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": "Missing parameters"}, status=status.HTTP_400_BAD_REQUEST)
 
-        user = get_object_or_404(ScoreUser, email=email)
-
+        user       = get_object_or_404(ScoreUser, email=email)
         reset_code = PasswordResetCodeModel.objects.filter(
-            user=user,
-            code=code
+            user=user, code=code
         ).order_by('-created_at').first()
 
         if not reset_code:
-            return Response(
-                {"error": "Invalid code"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": "Invalid code"}, status=status.HTTP_400_BAD_REQUEST)
 
         if reset_code.expiry_date < timezone.now():
-            return Response(
-                {"error": "Code expired"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": "Code expired"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Générer un token de reset
-        token = str(uuid.uuid4())
+        token          = str(uuid.uuid4())
         expiry_minutes = getattr(settings, "RESET_TOKEN_EXPIRY_MINUTES", 15)
 
         AccountCredentials.objects.create(
@@ -310,10 +292,11 @@ class VerifyValidationCode(APIView):
         return Response(
             {
                 "reset_token": token,
-                "expires_in": expiry_minutes * 60
+                "expires_in":  expiry_minutes * 60
             },
             status=status.HTTP_200_OK
         )
+
 
 # ─────────────────────────────────────────────
 # RESET PASSWORD
@@ -345,35 +328,23 @@ class ResetPassword(APIView):
         password = request.data.get("password")
 
         if not token or not password:
-            return Response(
-                {"error": "Missing parameters"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": "Missing parameters"}, status=status.HTTP_400_BAD_REQUEST)
 
         credentials = AccountCredentials.objects.filter(token=token).first()
 
         if not credentials:
-            return Response(
-                {"error": "Invalid token"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
 
         if credentials.expiry_date < timezone.now():
-            return Response(
-                {"error": "Token expired"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": "Token expired"}, status=status.HTTP_400_BAD_REQUEST)
 
         user = credentials.user
         user.set_password(password)
         user.save()
-
         credentials.delete()
 
-        return Response(
-            {"msg": "Password reset successfully"},
-            status=status.HTTP_200_OK
-        )
+        return Response({"msg": "Password reset successfully"}, status=status.HTTP_200_OK)
+
 
 # ─────────────────────────────────────────────
 # CHANGE PASSWORD
@@ -428,21 +399,22 @@ class ChangePassword(APIView):
             status=status.HTTP_200_OK
         )
 
+
 # ─────────────────────────────────────────────
-# PROFILE VIEW
+# PROFILE VIEW  ✅ RetrieveUpdateAPIView
 # ─────────────────────────────────────────────
 
 @extend_schema(
     tags=["Profil"],
-    summary="Mettre à jour le profil utilisateur",
-    description="Permet à un utilisateur authentifié de modifier son username et sa photo.",
+    summary="Récupérer et mettre à jour le profil utilisateur",
+    description="GET → récupérer le profil | PUT/PATCH → modifier le profil.",
     request=UserProfileSerializer,
     responses={
         200: UserProfileSerializer,
         400: OpenApiResponse(description="Données invalides"),
     },
 )
-class ProfileView(generics.UpdateAPIView):
+class ProfileView(generics.RetrieveUpdateAPIView):  # ✅ Retrieve + Update
     serializer_class   = UserProfileSerializer
     permission_classes = [IsAuthenticated]
 

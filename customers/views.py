@@ -28,16 +28,11 @@ from .serializers import (
 # ─────────────────────────────────────────────
 
 class IsHuissier(BasePermission):
-    """Huissier → toutes les actions."""
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role == 'huissier'
 
 
 class IsHuissierOrAdvisor(BasePermission):
-    """
-    Huissier → toutes les actions.
-    Conseiller → lecture uniquement.
-    """
     def has_permission(self, request, view):
         user = request.user
         if not user.is_authenticated:
@@ -53,11 +48,11 @@ class IsHuissierOrAdvisor(BasePermission):
 # HELPER — Vérification session de consultation
 # ─────────────────────────────────────────────
 
-def get_valid_session(session_token, customer_id):
+def get_valid_session(session_token, customer_uuid):
     try:
         session = ConsultationSession.objects.get(
             token=session_token,
-            customer_id=customer_id,
+            customer__uuid=customer_uuid,
             is_active=True,
         )
         if not session.is_valid():
@@ -115,7 +110,8 @@ def get_valid_session(session_token, customer_id):
 )
 class CustomerViewSet(viewsets.ModelViewSet):
     serializer_class   = CustomerSerializer
-    lookup_value_regex = r'\d+'
+    lookup_field       = 'uuid'
+    lookup_value_regex = r'[0-9a-f-]+'
 
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
@@ -133,27 +129,30 @@ class CustomerViewSet(viewsets.ModelViewSet):
     @extend_schema(
         tags=["Customers"],
         summary="Rechercher un client",
-        description="Recherche par nom ou NPI avant de demander l'OTP.",
+        description="Recherche par NPI uniquement.",
         parameters=[
-            OpenApiParameter(name='q', type=str, location=OpenApiParameter.QUERY, required=True),
+            OpenApiParameter(
+                name='npi',
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="Numéro Personnel d'Identification (NPI)"
+            ),
         ],
         responses={200: CustomerSearchSerializer(many=True)},
     )
     @action(detail=False, methods=['get'], url_path='search', permission_classes=[IsHuissierOrAdvisor])
     def search(self, request):
-        query = request.query_params.get('q', '').strip()
+        npi = request.query_params.get('npi', '').strip()  # ✅ npi
 
-        if not query:
+        if not npi:
             return Response(
-                {"error": "Paramètre 'q' requis."},
+                {"error": "Paramètre 'npi' requis."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        customers = Customer.objects.filter(
-            Q(first_name__icontains=query) |
-            Q(last_name__icontains=query)  |
-            Q(npi__icontains=query)
-        )
+        # ✅ Recherche exacte par NPI
+        customers = Customer.objects.filter(npi=npi)
 
         serializer = CustomerSearchSerializer(customers, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -285,7 +284,7 @@ class DebtViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         session_token = request.data.get('session_token')
-        customer_id   = request.data.get('customer')
+        customer_uuid = request.data.get('customer_uuid')
 
         if not session_token:
             return Response(
@@ -293,7 +292,7 @@ class DebtViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        session, error = get_valid_session(session_token, customer_id)
+        session, error = get_valid_session(session_token, customer_uuid)
         if error:
             return Response({"error": error}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -317,7 +316,6 @@ class DebtViewSet(viewsets.ModelViewSet):
             )
         return super().partial_update(request, *args, **kwargs)
 
-    # ✅ toggle_monitoring DANS la classe DebtViewSet
     @extend_schema(
         tags=["Customers - Dettes"],
         summary="Activer/désactiver le suivi d'une dette",
@@ -418,15 +416,15 @@ class RepaymentViewSet(viewsets.ModelViewSet):
             )
 
         try:
-            debt        = Debt.objects.get(id=debt_id)
-            customer_id = debt.customer.id
+            debt          = Debt.objects.get(id=debt_id)
+            customer_uuid = debt.customer.uuid
         except Exception:
             return Response(
                 {"error": "Dette introuvable."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        session, error = get_valid_session(session_token, customer_id)
+        session, error = get_valid_session(session_token, customer_uuid)
         if error:
             return Response({"error": error}, status=status.HTTP_400_BAD_REQUEST)
 

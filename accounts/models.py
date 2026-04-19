@@ -9,7 +9,7 @@ from .managers import CustomUserManager
 # SCORE USER
 # ─────────────────────────────────────────────
 
-class ScoreUser(AbstractBaseUser, PermissionsMixin):  # ✅ PermissionsMixin ajouté
+class ScoreUser(AbstractBaseUser, PermissionsMixin):
     ROLE_CHOICES = (
         ('admin',        'Administrateur'),
         ('conseiller',   'Conseiller financier'),
