@@ -154,7 +154,30 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        customer = serializer.save()
+
+        # ✅ Envoyer un email de notification au client
+        try:
+            send_mail(
+                subject        = "[SCORE] Votre compte a été créé",
+                message        = (
+                    f"Bonjour {customer.full_name},\n\n"
+                    f"Votre compte a été créé avec succès sur la plateforme SCORE "
+                    f"par Maître {request.user.username}.\n\n"
+                    f"Vos informations :\n"
+                    f"- Nom complet : {customer.full_name}\n"
+                    f"- NPI         : {customer.npi}\n"
+                    f"- Email       : {customer.email}\n\n"
+                    f"Si vous avez des questions, veuillez contacter votre huissier.\n\n"
+                    f"Cordialement,\nL'équipe SCORE"
+                ),
+                from_email     = settings.EMAIL_HOST_USER,
+                recipient_list = [customer.email],
+                fail_silently  = True,
+            )
+        except Exception:
+            pass
+
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @extend_schema(
