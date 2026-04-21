@@ -62,11 +62,22 @@ class CountrySerializer(serializers.ModelSerializer):
     def validate(self, attrs: dict):
         data = super().validate(attrs)
 
-        if ScoreUser.objects.filter(email=data.get('email')).exists():
-            raise serializers.ValidationError({'email': 'Account already exists'})
+        # ✅ Validation email/username uniquement à la création
+        if not self.instance:
+            if ScoreUser.objects.filter(email=data.get('email')).exists():
+                raise serializers.ValidationError({'email': 'Un compte avec cet email existe déjà.'})
 
-        if Country.objects.filter(iso_code=data.get('iso_code')).exists():
-            raise serializers.ValidationError({'iso_code': 'This country already exists'})
+            if ScoreUser.objects.filter(username=data.get('username')).exists():
+                raise serializers.ValidationError({'username': "Ce nom d'utilisateur est déjà utilisé."})
+
+        # ✅ Validation iso_code unique — ignorée lors d'une mise à jour du même pays
+        iso_code = data.get('iso_code')
+        if iso_code:
+            qs = Country.objects.filter(iso_code=iso_code)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError({'iso_code': 'Ce pays existe déjà.'})
 
         return data
 
@@ -116,8 +127,8 @@ class ZoneSerializer(serializers.ModelSerializer):
             'country': {
                 'write_only': True,
                 'help_text':  "ID du pays",
-                'required':   False,   # ✅ pas requis
-                'allow_null': True,    # ✅ accepte null
+                'required':   False,
+                'allow_null': True,
             },
             'name': {'help_text': "Nom de la zone"},
         }
@@ -146,7 +157,7 @@ class SubZoneSerializer(serializers.ModelSerializer):
             'zone': {
                 'write_only': True,
                 'help_text':  "ID de la zone parente",
-                'required':   True,    # ✅ zone obligatoire pour une subzone
+                'required':   True,
             },
             'name': {'help_text': "Nom de la sous-zone"},
         }

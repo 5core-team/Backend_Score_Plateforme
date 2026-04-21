@@ -26,6 +26,11 @@ class IsCountryRepresentant(BasePermission):
         return request.user.is_authenticated and request.user.role == 'country'
 
 
+class IsFrontOffice(BasePermission):
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.role == 'front office'
+
+
 # ─────────────────────────────────────────────
 # COUNTRY VIEWSET
 # ─────────────────────────────────────────────
@@ -89,7 +94,7 @@ class IsCountryRepresentant(BasePermission):
 )
 class CountryViewSet(viewsets.ViewSet):
     serializer_class   = CountrySerializer
-    lookup_value_regex = r'\d+'  # ✅
+    lookup_value_regex = r'\d+'
 
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
@@ -115,6 +120,7 @@ class CountryViewSet(viewsets.ViewSet):
 
     def update(self, request: Request, pk=None):
         country    = get_object_or_404(Country, pk=pk)
+        # ✅ instance passée pour que validate() ignore email/username/iso_code existants
         serializer = CountrySerializer(country, data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -123,6 +129,7 @@ class CountryViewSet(viewsets.ViewSet):
 
     def partial_update(self, request: Request, pk=None):
         country    = get_object_or_404(Country, pk=pk)
+        # ✅ instance passée pour que validate() ignore email/username/iso_code existants
         serializer = CountrySerializer(country, data=request.data, partial=True)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -137,6 +144,7 @@ class CountryViewSet(viewsets.ViewSet):
 
 # ─────────────────────────────────────────────
 # ZONE VIEWSET
+# Créé par : Représentant Pays
 # ─────────────────────────────────────────────
 
 @extend_schema_view(
@@ -154,7 +162,7 @@ class CountryViewSet(viewsets.ViewSet):
     create=extend_schema(
         tags=["Geography - Zone"],
         summary="Créer une zone",
-        description="Réservé au représentant pays uniquement.",
+        description="Réservé au représentant pays uniquement. Le pays est déduit automatiquement.",
         request=ZoneSerializer,
         responses={
             201: ZoneSerializer,
@@ -186,6 +194,7 @@ class ZoneViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            # ✅ Seul le représentant pays crée/modifie/supprime les zones
             return [IsCountryRepresentant()]
         return [IsAuthenticated()]
 
@@ -216,14 +225,13 @@ class ZoneViewSet(viewsets.ModelViewSet):
 
         return Zone.objects.none()
 
-    # ✅ On surcharge create pour injecter le pays avant la validation
     def create(self, request, *args, **kwargs):
+        # ✅ Le pays est déduit automatiquement depuis le représentant pays connecté
         try:
             country = Country.objects.get(manager=request.user)
         except Country.DoesNotExist:
             raise PermissionDenied("Vous n'êtes manager d'aucun pays.")
 
-        # ✅ On injecte le country dans les data avant validation
         data = request.data.copy()
         data['country'] = country.id
 
@@ -232,13 +240,61 @@ class ZoneViewSet(viewsets.ModelViewSet):
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+
+# ─────────────────────────────────────────────
+# SUBZONE VIEWSET
+# Créé par : Front Office
+# ─────────────────────────────────────────────
+
+@extend_schema_view(
+    list=extend_schema(
+        tags=["Geography - SubZone"],
+        summary="Lister les sous-zones",
+        description="Super admin → toutes | Représentant pays → ses sous-zones | Front office / Huissier / Conseiller → sous-zones de leur pays",
+        responses={200: SubZoneSerializer(many=True)},
+    ),
+    retrieve=extend_schema(
+        tags=["Geography - SubZone"],
+        summary="Récupérer une sous-zone",
+        responses={200: SubZoneSerializer, 404: OpenApiResponse(description="Sous-zone non trouvée")},
+    ),
+    create=extend_schema(
+        tags=["Geography - SubZone"],
+        summary="Créer une sous-zone",
+        description="Réservé au front office uniquement. La zone doit correspondre à sa zone de gestion.",
+        request=SubZoneSerializer,
+        responses={
+            201: SubZoneSerializer,
+            400: OpenApiResponse(description="Données invalides ou zone non autorisée"),
+            403: OpenApiResponse(description="Permission refusée"),
+        },
+    ),
+    update=extend_schema(
+        tags=["Geography - SubZone"],
+        summary="Modifier une sous-zone (complet)",
+        request=SubZoneSerializer,
+        responses={200: SubZoneSerializer},
+    ),
+    partial_update=extend_schema(
+        tags=["Geography - SubZone"],
+        summary="Modifier une sous-zone (partiel)",
+        request=SubZoneSerializer,
+        responses={200: SubZoneSerializer},
+    ),
+    destroy=extend_schema(
+        tags=["Geography - SubZone"],
+        summary="Supprimer une sous-zone",
+        responses={204: OpenApiResponse(description="Sous-zone supprimée")},
+    ),
+)
 class SubZoneViewSet(viewsets.ModelViewSet):
     serializer_class   = SubZoneSerializer
-    lookup_value_regex = r'\d+'  # ✅
+    lookup_value_regex = r'\d+'
 
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            return [IsCountryRepresentant()]
+            # ✅ Correction : c'est le Front Office qui gère les sous-zones
+            return [IsFrontOffice()]
         return [IsAuthenticated()]
 
     def get_queryset(self):
@@ -267,3 +323,42 @@ class SubZoneViewSet(viewsets.ModelViewSet):
                 return SubZone.objects.filter(zone__country=fa.zone.country) if fa else SubZone.objects.none()
 
         return SubZone.objects.none()
+
+    def create(self, request, *args, **kwargs):
+        from staff.models import FrontOffice
+
+        # ✅ Récupérer le front office connecté
+        try:
+            front_office = FrontOffice.objects.get(user=request.user)
+        except FrontOffice.DoesNotExist:
+            return Response(
+                {"error": "Aucun profil front office associé à votre compte."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # ✅ Vérifier que la zone appartient bien à la zone du front office
+        zone_id = request.data.get('zone')
+        if not zone_id:
+            return Response(
+                {"error": "Le champ 'zone' est requis."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            zone = Zone.objects.get(id=zone_id)
+        except Zone.DoesNotExist:
+            return Response(
+                {"error": "Zone introuvable."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if zone != front_office.zone:
+            return Response(
+                {"error": "Cette zone ne correspond pas à votre zone de gestion."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
