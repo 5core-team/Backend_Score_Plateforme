@@ -42,6 +42,40 @@ L'équipe Score
     )
 
 
+def send_customer_creation_email(customer, huissier_username: str):
+    """
+    Envoie un email de notification au client après sa création par un huissier.
+
+    Appelé depuis customers/serializers.py après la création du client.
+    """
+    subject = "Création de votre dossier sur la plateforme SCORE"
+    message = f"""
+Bonjour {customer.full_name},
+
+Votre dossier a été créé avec succès sur la plateforme SCORE
+par Maître {huissier_username}.
+
+Vos informations enregistrées :
+- Nom complet : {customer.full_name}
+- NPI         : {customer.npi}
+- Email       : {customer.email}
+
+Si vous avez des questions ou si vous n'êtes pas à l'origine de cette démarche,
+veuillez contacter directement votre huissier.
+
+Cordialement,
+L'équipe SCORE
+    """.strip()
+
+    send_mail(
+        subject=subject,
+        message=message,
+        from_email=settings.EMAIL_HOST_USER,
+        recipient_list=[customer.email],
+        fail_silently=False,
+    )
+
+
 def send_email(data: dict):
     """
     Envoie un email simple.
