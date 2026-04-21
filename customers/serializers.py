@@ -42,9 +42,9 @@ class CustomerSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'uuid':         {'read_only': True},
             'credit_score': {'read_only': True},
-            'zone':         {'write_only': True, 'help_text': "ID de la zone", 'required': False},
-            'subZone':      {'write_only': True, 'help_text': "ID de la sous-zone", 'required': False},
-            'huissier':     {'write_only': True, 'help_text': "ID de l'huissier", 'required': False},
+            'zone':         {'read_only': True},    # ✅ déduit automatiquement
+            'subZone':      {'read_only': True},    # ✅ déduit automatiquement
+            'huissier':     {'read_only': True},    # ✅ déduit automatiquement
             'created_at':   {'read_only': True},
             'updated_at':   {'read_only': True},
         }
@@ -67,7 +67,7 @@ class CustomerSearchSerializer(serializers.ModelSerializer):
 # ─────────────────────────────────────────────
 
 class ConsultationOTPRequestSerializer(serializers.Serializer):
-    customer_uuid = serializers.UUIDField(help_text="UUID du client à consulter")  # ✅
+    customer_uuid = serializers.UUIDField(help_text="UUID du client à consulter")
 
     def validate_customer_uuid(self, value):
         if not Customer.objects.filter(uuid=value).exists():
@@ -118,7 +118,7 @@ class ConsultationOTPRequestSerializer(serializers.Serializer):
 # ─────────────────────────────────────────────
 
 class ConsultationOTPVerifySerializer(serializers.Serializer):
-    customer_uuid = serializers.UUIDField(help_text="UUID du client")  # ✅
+    customer_uuid = serializers.UUIDField(help_text="UUID du client")
     code          = serializers.CharField(max_length=6, help_text="Code OTP reçu par le client")
 
     def validate(self, attrs):
@@ -184,12 +184,13 @@ class RepaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Repayment
         fields = [
-            'id',
+            'uuid',              # ✅
             'debt',
             'date',
-            'validation_status',  # ✅ ajouté
+            'validation_status',
         ]
         extra_kwargs = {
+            'uuid':              {'read_only': True},
             'debt':              {'help_text': "ID de la dette"},
             'date':              {'help_text': "Date du remboursement"},
             'validation_status': {'read_only': True, 'help_text': "Statut de validation"},
@@ -203,15 +204,16 @@ class RepaymentSerializer(serializers.ModelSerializer):
 class DebtSerializer(serializers.ModelSerializer):
     repayments    = RepaymentSerializer(many=True, read_only=True)
     customer_name = serializers.CharField(source='customer.full_name', read_only=True)
-    customer_uuid = serializers.UUIDField(source='customer.uuid', read_only=True)  # ✅
+    customer_uuid = serializers.UUIDField(source='customer.uuid', read_only=True)
     creditor_name = serializers.CharField(source='creditor.full_name', read_only=True)
 
     class Meta:
         model  = Debt
         fields = [
+            'uuid',              # ✅
             'id',
             'customer',
-            'customer_uuid',     # ✅
+            'customer_uuid',
             'customer_name',
             'creditor',
             'creditor_name',
@@ -221,13 +223,14 @@ class DebtSerializer(serializers.ModelSerializer):
             'deadline',
             'verified',
             'status',
-            'validation_status', # ✅
-            'is_monitored',      # ✅
+            'validation_status',
+            'is_monitored',
             'created_at',
             'updated_at',
             'repayments',
         ]
         extra_kwargs = {
+            'uuid':              {'read_only': True},
             'customer':          {'write_only': True, 'help_text': "ID du client débiteur"},
             'creditor':          {'write_only': True, 'help_text': "ID du client créditeur", 'required': False},
             'amount':            {'help_text': "Montant de la dette"},

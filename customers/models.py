@@ -5,8 +5,8 @@ import secrets
 
 from geography.models import Zone, SubZone
 from staff.models import Huissier
-from drf_spectacular.utils import extend_schema_field  # ✅ ajouté
-from drf_spectacular.types import OpenApiTypes          # ✅ ajouté
+from drf_spectacular.utils import extend_schema_field
+from drf_spectacular.types import OpenApiTypes
 
 
 class Customer(models.Model):
@@ -18,11 +18,8 @@ class Customer(models.Model):
     phone_number = models.CharField(max_length=20, null=True, blank=True)
     credit_score = models.FloatField(default=0.0)
 
-    # Geography
-    zone    = models.ForeignKey(Zone,    on_delete=models.SET_NULL, null=True, related_name="customers")
-    subZone = models.ForeignKey(SubZone, on_delete=models.SET_NULL, null=True, related_name="customers")
-
-    # Staff
+    zone     = models.ForeignKey(Zone,     on_delete=models.SET_NULL, null=True, related_name="customers")
+    subZone  = models.ForeignKey(SubZone,  on_delete=models.SET_NULL, null=True, related_name="customers")
     huissier = models.ForeignKey(Huissier, on_delete=models.SET_NULL, null=True, related_name="customers")
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -45,7 +42,7 @@ class Customer(models.Model):
 
 
 # ─────────────────────────────────────────────
-# OTP — Autorisation de consultation du compte
+# OTP
 # ─────────────────────────────────────────────
 
 class ConsultationOTP(models.Model):
@@ -115,6 +112,7 @@ class Debt(models.Model):
         ('rejected',  'Refusée par le client'),
     ]
 
+    uuid            = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)  # ✅
     customer        = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, related_name='debts')
     creditor        = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, related_name="receivables")
     amount          = models.DecimalField(max_digits=10, decimal_places=2)
@@ -134,14 +132,12 @@ class Debt(models.Model):
 
     validation_token        = models.CharField(max_length=100, null=True, blank=True, unique=True)
     validation_token_expiry = models.DateTimeField(null=True, blank=True)
-    # ✅ Suivi et alertes
-    is_monitored    = models.BooleanField(default=False, verbose_name="Suivi activé")
-    last_alert_sent = models.DateField(null=True, blank=True, verbose_name="Dernière alerte envoyée")
+    is_monitored            = models.BooleanField(default=False, verbose_name="Suivi activé")
+    last_alert_sent         = models.DateField(null=True, blank=True, verbose_name="Dernière alerte envoyée")
 
     @property
-    @extend_schema_field(OpenApiTypes.BOOL)  # ✅ ajouté
+    @extend_schema_field(OpenApiTypes.BOOL)
     def verified(self) -> bool:
-        """Rétrocompatibilité — True si validée par le client."""
         return self.validation_status == 'validated'
 
     def is_editable(self):
@@ -186,6 +182,7 @@ class Repayment(models.Model):
         ('rejected',  'Refusé par le client'),
     ]
 
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)  # ✅
     debt = models.ForeignKey(Debt, on_delete=models.CASCADE, related_name='repayments')
     date = models.DateField()
 
@@ -200,9 +197,8 @@ class Repayment(models.Model):
     validation_token_expiry = models.DateTimeField(null=True, blank=True)
 
     @property
-    @extend_schema_field(OpenApiTypes.BOOL)  # ✅ ajouté
+    @extend_schema_field(OpenApiTypes.BOOL)
     def verified(self) -> bool:
-        """Rétrocompatibilité — True si validé par le client."""
         return self.validation_status == 'validated'
 
     def is_editable(self):
