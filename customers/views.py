@@ -80,7 +80,7 @@ def get_valid_session(session_token, customer_uuid):
     create=extend_schema(
         tags=["Customers"],
         summary="Créer un client",
-        description="Réservé à l'huissier uniquement.",
+        description="Réservé à l'huissier uniquement. Zone, sous-zone et huissier sont déduits automatiquement.",
         request=CustomerSerializer,
         responses={
             201: CustomerSerializer,
@@ -126,6 +126,37 @@ class CustomerViewSet(viewsets.ModelViewSet):
             return Customer.objects.all()
         return Customer.objects.none()
 
+    def create(self, request, *args, **kwargs):
+        from staff.models import Huissier, FrontOffice
+
+        # ✅ Récupérer le profil huissier connecté
+        try:
+            huissier = Huissier.objects.get(user=request.user)
+        except Huissier.DoesNotExist:
+            return Response(
+                {"error": "Aucun profil huissier associé à votre compte."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # ✅ Récupérer la zone du front office qui a créé l'huissier
+        front_office = FrontOffice.objects.filter(zone=huissier.zone).first()
+        if not front_office:
+            return Response(
+                {"error": "Aucun front office associé à la zone de cet huissier."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # ✅ Injecter automatiquement zone, subZone et huissier
+        data = request.data.copy()
+        data['zone']     = front_office.zone.id
+        data['subZone']  = huissier.subZone.id if huissier.subZone else None
+        data['huissier'] = huissier.id
+
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
     @extend_schema(
         tags=["Customers"],
         summary="Rechercher un client",
@@ -143,7 +174,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
     )
     @action(detail=False, methods=['get'], url_path='search', permission_classes=[IsHuissierOrAdvisor])
     def search(self, request):
-        npi = request.query_params.get('npi', '').strip()  # ✅ npi
+        npi = request.query_params.get('npi', '').strip()
 
         if not npi:
             return Response(
@@ -151,9 +182,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # ✅ Recherche exacte par NPI
         customers = Customer.objects.filter(npi=npi)
-
         serializer = CustomerSearchSerializer(customers, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -265,12 +294,13 @@ class CustomerViewSet(viewsets.ModelViewSet):
 )
 class DebtViewSet(viewsets.ModelViewSet):
     serializer_class   = DebtSerializer
-    lookup_value_regex = r'\d+'
+    lookup_field       = 'uuid'
+    lookup_value_regex = r'[0-9a-f-]+'
 
     http_method_names = ['get', 'post', 'put', 'patch', 'head', 'options']
 
     def get_permissions(self):
-        if self.action in ['create', 'update', 'partial_update', 'toggle_monitoring']:
+        if self.action in ['create', 'update', 'partial_update', 'toggle_monitoring', 'send_validation']:
             return [IsHuissier()]
         return [IsHuissierOrAdvisor()]
 
@@ -324,7 +354,7 @@ class DebtViewSet(viewsets.ModelViewSet):
         responses=None,
     )
     @action(detail=True, methods=['post'], url_path='toggle-monitoring', permission_classes=[IsHuissier])
-    def toggle_monitoring(self, request, pk=None):
+    def toggle_monitoring(self, request, uuid=None):
         debt = self.get_object()
 
         if debt.validation_status != 'validated':
@@ -341,6 +371,52 @@ class DebtViewSet(viewsets.ModelViewSet):
                 "message":      f"Suivi {'activé' if debt.is_monitored else 'désactivé'} avec succès.",
                 "is_monitored": debt.is_monitored,
             },
+            status=status.HTTP_200_OK
+        )
+
+    @extend_schema(
+        tags=["Customers - Dettes"],
+        summary="Envoyer le lien de validation d'une dette",
+        description="Envoie un lien unique au client pour valider ou refuser la dette.",
+        request=None,
+        responses=None,
+    )
+    @action(detail=True, methods=['post'], url_path='send-validation', permission_classes=[IsHuissier])
+    def send_validation(self, request, uuid=None):
+        debt = self.get_object()
+
+        if not debt.is_editable():
+            return Response(
+                {"error": "Cette dette a déjà été validée par le client."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        token = debt.generate_validation_token()
+
+        base_url     = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+        validate_url = f"{base_url}/debts/validate/?token={token}"
+        reject_url   = f"{base_url}/debts/reject/?token={token}"
+
+        send_mail(
+            subject        = "[SCORE] Confirmation d'enregistrement de dette",
+            message        = (
+                f"Bonjour {debt.customer.full_name},\n\n"
+                f"Une dette a été enregistrée à votre nom :\n"
+                f"- Montant       : {debt.amount}\n"
+                f"- Échéance      : {debt.deadline}\n"
+                f"- Périodicité   : {debt.periodicity}\n\n"
+                f"Pour VALIDER cette dette, cliquez ici :\n{validate_url}\n\n"
+                f"Pour REFUSER cette dette, cliquez ici :\n{reject_url}\n\n"
+                f"Ce lien est valable 7 jours.\n\n"
+                f"Cordialement,\nL'équipe SCORE"
+            ),
+            from_email     = settings.EMAIL_HOST_USER,
+            recipient_list = [debt.customer.email],
+            fail_silently  = False,
+        )
+
+        return Response(
+            {"message": "Lien de validation envoyé au client par email."},
             status=status.HTTP_200_OK
         )
 
@@ -388,12 +464,13 @@ class DebtViewSet(viewsets.ModelViewSet):
 )
 class RepaymentViewSet(viewsets.ModelViewSet):
     serializer_class   = RepaymentSerializer
-    lookup_value_regex = r'\d+'
+    lookup_field       = 'uuid'
+    lookup_value_regex = r'[0-9a-f-]+'
 
     http_method_names = ['get', 'post', 'put', 'patch', 'head', 'options']
 
     def get_permissions(self):
-        if self.action in ['create', 'update', 'partial_update']:
+        if self.action in ['create', 'update', 'partial_update', 'send_validation']:
             return [IsHuissier()]
         return [IsHuissierOrAdvisor()]
 
@@ -407,7 +484,7 @@ class RepaymentViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         session_token = request.data.get('session_token')
-        debt_id       = request.data.get('debt')
+        debt_uuid     = request.data.get('debt_uuid')
 
         if not session_token:
             return Response(
@@ -416,7 +493,7 @@ class RepaymentViewSet(viewsets.ModelViewSet):
             )
 
         try:
-            debt          = Debt.objects.get(id=debt_id)
+            debt          = Debt.objects.get(uuid=debt_uuid)
             customer_uuid = debt.customer.uuid
         except Exception:
             return Response(
@@ -428,7 +505,12 @@ class RepaymentViewSet(viewsets.ModelViewSet):
         if error:
             return Response({"error": error}, status=status.HTTP_400_BAD_REQUEST)
 
-        return super().create(request, *args, **kwargs)
+        data = request.data.copy()
+        data['debt'] = debt.id
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def update(self, request, *args, **kwargs):
         repayment = self.get_object()
@@ -448,57 +530,44 @@ class RepaymentViewSet(viewsets.ModelViewSet):
             )
         return super().partial_update(request, *args, **kwargs)
 
+    @extend_schema(
+        tags=["Customers - Remboursements"],
+        summary="Envoyer le lien de validation d'un remboursement",
+        description="Envoie un lien unique au client pour valider ou refuser le remboursement.",
+        request=None,
+        responses=None,
+    )
+    @action(detail=True, methods=['post'], url_path='send-validation', permission_classes=[IsHuissier])
+    def send_validation(self, request, uuid=None):
+        repayment = self.get_object()
 
-# ─────────────────────────────────────────────
-# VALIDATION DETTE PAR LIEN UNIQUE
-# ─────────────────────────────────────────────
-
-@extend_schema(
-    tags=["Customers - Dettes"],
-    summary="Envoyer le lien de validation d'une dette",
-    description="Envoie un lien unique au client pour valider ou refuser la dette.",
-    request=None,
-    responses=None,
-)
-class DebtSendValidationView(APIView):
-    permission_classes = [IsHuissier]
-
-    def post(self, request, pk):
-        try:
-            debt = Debt.objects.get(pk=pk)
-        except Debt.DoesNotExist:
+        if not repayment.is_editable():
             return Response(
-                {"error": "Dette introuvable."},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        if not debt.is_editable():
-            return Response(
-                {"error": "Cette dette a déjà été validée par le client."},
+                {"error": "Ce remboursement a déjà été validé par le client."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        token = debt.generate_validation_token()
+        token = repayment.generate_validation_token()
 
         base_url     = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
-        validate_url = f"{base_url}/debts/validate/?token={token}"
-        reject_url   = f"{base_url}/debts/reject/?token={token}"
+        validate_url = f"{base_url}/repayments/validate/?token={token}"
+        reject_url   = f"{base_url}/repayments/reject/?token={token}"
 
+        customer = repayment.debt.customer
         send_mail(
-            subject        = "[SCORE] Confirmation d'enregistrement de dette",
+            subject        = "[SCORE] Confirmation de remboursement",
             message        = (
-                f"Bonjour {debt.customer.full_name},\n\n"
-                f"Une dette a été enregistrée à votre nom :\n"
-                f"- Montant       : {debt.amount}\n"
-                f"- Échéance      : {debt.deadline}\n"
-                f"- Périodicité   : {debt.periodicity}\n\n"
-                f"Pour VALIDER cette dette, cliquez ici :\n{validate_url}\n\n"
-                f"Pour REFUSER cette dette, cliquez ici :\n{reject_url}\n\n"
+                f"Bonjour {customer.full_name},\n\n"
+                f"Un remboursement a été enregistré pour votre dette :\n"
+                f"- Date          : {repayment.date}\n"
+                f"- Montant dette : {repayment.debt.amount}\n\n"
+                f"Pour VALIDER ce remboursement, cliquez ici :\n{validate_url}\n\n"
+                f"Pour REFUSER ce remboursement, cliquez ici :\n{reject_url}\n\n"
                 f"Ce lien est valable 7 jours.\n\n"
                 f"Cordialement,\nL'équipe SCORE"
             ),
             from_email     = settings.EMAIL_HOST_USER,
-            recipient_list = [debt.customer.email],
+            recipient_list = [customer.email],
             fail_silently  = False,
         )
 
@@ -507,6 +576,10 @@ class DebtSendValidationView(APIView):
             status=status.HTTP_200_OK
         )
 
+
+# ─────────────────────────────────────────────
+# VALIDATION DETTE PAR LIEN UNIQUE
+# ─────────────────────────────────────────────
 
 @extend_schema(
     tags=["Customers - Dettes"],
@@ -607,61 +680,6 @@ class DebtRejectView(APIView):
 # ─────────────────────────────────────────────
 # VALIDATION REMBOURSEMENT PAR LIEN UNIQUE
 # ─────────────────────────────────────────────
-
-@extend_schema(
-    tags=["Customers - Remboursements"],
-    summary="Envoyer le lien de validation d'un remboursement",
-    description="Envoie un lien unique au client pour valider ou refuser le remboursement.",
-    request=None,
-    responses=None,
-)
-class RepaymentSendValidationView(APIView):
-    permission_classes = [IsHuissier]
-
-    def post(self, request, pk):
-        try:
-            repayment = Repayment.objects.get(pk=pk)
-        except Repayment.DoesNotExist:
-            return Response(
-                {"error": "Remboursement introuvable."},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        if not repayment.is_editable():
-            return Response(
-                {"error": "Ce remboursement a déjà été validé par le client."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        token = repayment.generate_validation_token()
-
-        base_url     = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
-        validate_url = f"{base_url}/repayments/validate/?token={token}"
-        reject_url   = f"{base_url}/repayments/reject/?token={token}"
-
-        customer = repayment.debt.customer
-        send_mail(
-            subject        = "[SCORE] Confirmation de remboursement",
-            message        = (
-                f"Bonjour {customer.full_name},\n\n"
-                f"Un remboursement a été enregistré pour votre dette :\n"
-                f"- Date          : {repayment.date}\n"
-                f"- Montant dette : {repayment.debt.amount}\n\n"
-                f"Pour VALIDER ce remboursement, cliquez ici :\n{validate_url}\n\n"
-                f"Pour REFUSER ce remboursement, cliquez ici :\n{reject_url}\n\n"
-                f"Ce lien est valable 7 jours.\n\n"
-                f"Cordialement,\nL'équipe SCORE"
-            ),
-            from_email     = settings.EMAIL_HOST_USER,
-            recipient_list = [customer.email],
-            fail_silently  = False,
-        )
-
-        return Response(
-            {"message": "Lien de validation envoyé au client par email."},
-            status=status.HTTP_200_OK
-        )
-
 
 @extend_schema(
     tags=["Customers - Remboursements"],
