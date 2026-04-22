@@ -42,9 +42,9 @@ class CustomerSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'uuid':         {'read_only': True},
             'credit_score': {'read_only': True},
-            'zone':         {'read_only': True},
-            'subZone':      {'read_only': True},
-            'huissier':     {'read_only': True},
+            'zone':         {'read_only': True},    # ✅ déduit automatiquement
+            'subZone':      {'read_only': True},    # ✅ déduit automatiquement
+            'huissier':     {'read_only': True},    # ✅ déduit automatiquement
             'created_at':   {'read_only': True},
             'updated_at':   {'read_only': True},
         }
@@ -65,12 +65,16 @@ class CustomerSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         customer = super().create(validated_data)
 
-        # ✅ Envoi de l'email de notification — même logique que staff/serializers.py
-        huissier_username = (
-            customer.huissier.user.username
-            if customer.huissier and customer.huissier.user
-            else "un huissier"
-        )
+        # ✅ Récupérer le nom de l'huissier — nom profil en priorité, sinon username
+        if customer.huissier and customer.huissier.user:
+            huissier_username = (
+                customer.huissier.name
+                if customer.huissier.name
+                else customer.huissier.user.username
+            )
+        else:
+            huissier_username = "un huissier"
+
         send_customer_creation_email(customer, huissier_username)
 
         return customer

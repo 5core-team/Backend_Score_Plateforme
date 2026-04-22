@@ -162,7 +162,7 @@ class CountryViewSet(viewsets.ViewSet):
     create=extend_schema(
         tags=["Geography - Zone"],
         summary="Créer une zone",
-        description="Réservé au représentant pays uniquement. Le pays est déduit automatiquement.",
+        description="Réservé au représentant pays uniquement. Le pays est déduit automatiquement — le frontend envoie uniquement 'name'.",
         request=ZoneSerializer,
         responses={
             201: ZoneSerializer,
@@ -194,7 +194,6 @@ class ZoneViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            # ✅ Seul le représentant pays crée/modifie/supprime les zones
             return [IsCountryRepresentant()]
         return [IsAuthenticated()]
 
@@ -232,12 +231,10 @@ class ZoneViewSet(viewsets.ModelViewSet):
         except Country.DoesNotExist:
             raise PermissionDenied("Vous n'êtes manager d'aucun pays.")
 
-        data = request.data.copy()
-        data['country'] = country.id
-
-        serializer = self.get_serializer(data=data)
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        # ✅ Le country est injecté via save() — le frontend n'envoie que 'name'
+        serializer.save(country=country)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -261,11 +258,11 @@ class ZoneViewSet(viewsets.ModelViewSet):
     create=extend_schema(
         tags=["Geography - SubZone"],
         summary="Créer une sous-zone",
-        description="Réservé au front office uniquement. La zone doit correspondre à sa zone de gestion.",
+        description="Réservé au front office uniquement. La zone est déduite automatiquement — le frontend envoie uniquement 'name'.",
         request=SubZoneSerializer,
         responses={
             201: SubZoneSerializer,
-            400: OpenApiResponse(description="Données invalides ou zone non autorisée"),
+            400: OpenApiResponse(description="Données invalides"),
             403: OpenApiResponse(description="Permission refusée"),
         },
     ),
@@ -293,7 +290,7 @@ class SubZoneViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            # ✅ Correction : c'est le Front Office qui gère les sous-zones
+            # ✅ C'est le Front Office qui gère les sous-zones
             return [IsFrontOffice()]
         return [IsAuthenticated()]
 
@@ -336,29 +333,8 @@ class SubZoneViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # ✅ Vérifier que la zone appartient bien à la zone du front office
-        zone_id = request.data.get('zone')
-        if not zone_id:
-            return Response(
-                {"error": "Le champ 'zone' est requis."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        try:
-            zone = Zone.objects.get(id=zone_id)
-        except Zone.DoesNotExist:
-            return Response(
-                {"error": "Zone introuvable."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        if zone != front_office.zone:
-            return Response(
-                {"error": "Cette zone ne correspond pas à votre zone de gestion."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        # ✅ La zone est injectée via save() — le frontend n'envoie que 'name'
+        serializer.save(zone=front_office.zone)
         return Response(serializer.data, status=status.HTTP_201_CREATED)

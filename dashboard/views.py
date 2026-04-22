@@ -36,7 +36,6 @@ class SuperAdminDashboardView(APIView):
         expired_countries = total_countries - active_countries
 
         countries_detail = countries_qs.values('id', 'name', 'iso_code').annotate(
-            # ✅ related_names corrects
             front_office_count=Count('zones__frontoffices', distinct=True),
             customer_count=Count('zones__customers', distinct=True),
         )
@@ -147,7 +146,6 @@ class CountryDashboardView(APIView):
         zones        = Zone.objects.filter(country=country)
         zones_detail = zones.values('id', 'name').annotate(
             customer_count=Count('customers', distinct=True),
-            # ✅ related_name correct
             front_office_count=Count('frontoffices', distinct=True),
         )
 
@@ -160,6 +158,7 @@ class CountryDashboardView(APIView):
         total_advisors  = FinancialAdvisor.objects.filter(zone__country=country).count()
         active_advisors = FinancialAdvisor.objects.filter(zone__country=country, is_active=True).count()
 
+        # ✅ Clients dont la zone appartient à ce pays
         total_customers   = Customer.objects.filter(zone__country=country).count()
         customers_by_zone = (
             Customer.objects
@@ -270,6 +269,7 @@ class FrontOfficeDashboardView(APIView):
         total_advisors  = FinancialAdvisor.objects.filter(zone=zone).count()
         active_advisors = FinancialAdvisor.objects.filter(zone=zone, is_active=True).count()
 
+        # ✅ Clients dont la zone correspond à la zone du front office
         total_customers      = Customer.objects.filter(zone=zone).count()
         customers_by_subzone = (
             Customer.objects
@@ -366,39 +366,44 @@ class HuissierDashboardView(APIView):
                 status=404
             )
 
+        # ✅ Clients créés par CET huissier
         total_customers = Customer.objects.filter(huissier=huissier).count()
 
-        debts_qs        = Debt.objects.filter(customer__huissier=huissier)
-        total_debts     = debts_qs.count()
-        # ✅ validation_status='validated' au lieu de verified=True
-        verified_debts  = debts_qs.filter(validation_status='validated').count()
-        taux_de_reponse = round((verified_debts / total_debts * 100), 1) if total_debts > 0 else 0
+        # ✅ Toutes les dettes des clients de cet huissier
+        debts_qs       = Debt.objects.filter(customer__huissier=huissier)
+        total_debts    = debts_qs.count()
+        verified_debts = debts_qs.filter(validation_status='validated').count()
 
+        # ✅ Taux de réponse = % d'OTPs validés parmi ceux envoyés aux clients de cet huissier
+        total_otps_envoyes = ConsultationOTP.objects.filter(customer__huissier=huissier).count()
+        total_otps_valides = ConsultationOTP.objects.filter(customer__huissier=huissier, is_used=True).count()
+        taux_de_reponse    = round((total_otps_valides / total_otps_envoyes * 100), 1) if total_otps_envoyes > 0 else 0
+
+        # ✅ Total des consultations ouvertes par cet huissier
         total_consultations = ConsultationSession.objects.filter(
             created_by=request.user
         ).count()
 
-        consulted_customer_ids = (
-            ConsultationSession.objects
-            .filter(created_by=request.user)
-            .values_list('customer_id', flat=True)
-            .distinct()
+        # ✅ Dettes surveillées (is_monitored=True) des clients de cet huissier
+        dettes_surveillees_qs  = Debt.objects.filter(
+            customer__huissier=huissier,
+            is_monitored=True
         )
-
-        dettes_suivies_qs      = Debt.objects.filter(customer__id__in=consulted_customer_ids)
-        total_dettes_suivies   = dettes_suivies_qs.count()
-        pending_dettes_suivies = dettes_suivies_qs.filter(status='pending').count()
-        done_dettes_suivies    = dettes_suivies_qs.filter(status='done').count()
-        overdue_dettes_suivies = dettes_suivies_qs.filter(
+        total_dettes_suivies   = dettes_surveillees_qs.count()
+        pending_dettes_suivies = dettes_surveillees_qs.filter(status='pending').count()
+        done_dettes_suivies    = dettes_surveillees_qs.filter(status='done').count()
+        overdue_dettes_suivies = dettes_surveillees_qs.filter(
             status='pending', deadline__lt=now.date()
         ).count()
-        total_amount_suivies = dettes_suivies_qs.aggregate(total=Sum('amount'))['total'] or 0
+        total_amount_suivies   = dettes_surveillees_qs.aggregate(total=Sum('amount'))['total'] or 0
 
+        # ✅ Remboursements des dettes surveillées de cet huissier
         total_remboursements_suivis = Repayment.objects.filter(
-            debt__customer__id__in=consulted_customer_ids
+            debt__customer__huissier=huissier,
+            debt__is_monitored=True
         ).count()
 
-        # ✅ OTPs filtrés sur les clients de CET huissier uniquement
+        # ✅ Dernières demandes OTP des clients de CET huissier
         derniers_otps = (
             ConsultationOTP.objects
             .filter(customer__huissier=huissier)
@@ -442,14 +447,14 @@ class HuissierDashboardView(APIView):
                 "dossiers_crees":      total_customers,
                 "taux_de_reponse":     taux_de_reponse,
                 "total_consultations": total_consultations,
-                "dettes_suivies": {
+                "dettes_surveillees": {
                     "total":        total_dettes_suivies,
                     "pending":      pending_dettes_suivies,
                     "done":         done_dettes_suivies,
                     "overdue":      overdue_dettes_suivies,
                     "total_amount": float(total_amount_suivies),
                 },
-                "remboursements_suivis": {
+                "remboursements_surveilles": {
                     "total": total_remboursements_suivis,
                 },
             },
@@ -481,18 +486,26 @@ class FinancialAdvisorDashboardView(APIView):
                 status=404
             )
 
+        # ✅ Total des consultations ouvertes par CE conseiller
         total_consultations = ConsultationSession.objects.filter(
             created_by=request.user
         ).count()
 
-        # ✅ OTPs filtrés sur les consultations de CE conseiller uniquement
-        otps_qs        = ConsultationOTP.objects.filter(
+        # ✅ OTPs envoyés aux clients consultés par CE conseiller
+        total_otps_envoyes = ConsultationOTP.objects.filter(
             customer__sessions__created_by=request.user
-        ).distinct()
-        total_otps      = otps_qs.count()
-        validated_otps  = otps_qs.filter(is_used=True).count()
-        taux_de_reponse = round((validated_otps / total_otps * 100), 1) if total_otps > 0 else 0
+        ).distinct().count()
 
+        # ✅ OTPs validés parmi ceux envoyés par CE conseiller
+        total_otps_valides = ConsultationOTP.objects.filter(
+            customer__sessions__created_by=request.user,
+            is_used=True
+        ).distinct().count()
+
+        # ✅ Taux = % de clients ayant validé l'OTP parmi ceux contactés
+        taux_de_reponse = round((total_otps_valides / total_otps_envoyes * 100), 1) if total_otps_envoyes > 0 else 0
+
+        # ✅ Dernières consultations de CE conseiller uniquement
         derniers_otps = (
             ConsultationOTP.objects
             .filter(customer__sessions__created_by=request.user)

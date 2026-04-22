@@ -125,10 +125,10 @@ class ZoneSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'country', 'country_name']
         extra_kwargs = {
             'country': {
-                'write_only': True,
-                'help_text':  "ID du pays",
-                'required':   False,
-                'allow_null': True,
+                # ✅ Le pays est injecté automatiquement depuis le représentant pays connecté
+                # Le frontend n'envoie que 'name'
+                'read_only': True,
+                'help_text': "Déduit automatiquement depuis le représentant pays connecté",
             },
             'name': {'help_text': "Nom de la zone"},
         }
@@ -155,9 +155,10 @@ class SubZoneSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'zone', 'zone_name', 'country_name']
         extra_kwargs = {
             'zone': {
-                'write_only': True,
-                'help_text':  "ID de la zone parente",
-                'required':   True,
+                # ✅ La zone est injectée automatiquement depuis le front office connecté
+                # Le frontend n'envoie que 'name'
+                'read_only': True,
+                'help_text': "Déduite automatiquement depuis le front office connecté",
             },
             'name': {'help_text': "Nom de la sous-zone"},
         }

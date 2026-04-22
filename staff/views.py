@@ -64,6 +64,7 @@ def validate_subzone_belongs_to_front_office(subzone_id, front_office):
 # ─────────────────────────────────────────────
 # FRONT OFFICE
 # Créé par : Représentant Pays
+# La zone est déduite automatiquement depuis le pays du représentant
 # ─────────────────────────────────────────────
 
 @extend_schema_view(
@@ -79,7 +80,7 @@ def validate_subzone_belongs_to_front_office(subzone_id, front_office):
     create=extend_schema(
         tags=["Staff - Front Office"],
         summary="Créer un front office",
-        description="Réservé au représentant pays uniquement.",
+        description="Réservé au représentant pays uniquement. La zone est déduite automatiquement — le frontend envoie : email, username, name, npi, phone.",
     ),
     update=extend_schema(
         tags=["Staff - Front Office"],
@@ -124,10 +125,44 @@ class FrontOfficeViewSet(viewsets.ModelViewSet):
 
         return FrontOffice.objects.none()
 
+    def create(self, request, *args, **kwargs):
+        from geography.models import Country, Zone
+
+        # ✅ Récupérer le pays du représentant pays connecté
+        try:
+            country = Country.objects.get(manager=request.user)
+        except Country.DoesNotExist:
+            raise PermissionDenied("Vous n'êtes manager d'aucun pays.")
+
+        # ✅ Le représentant pays peut préciser la zone via zone_id (optionnel)
+        zone_id = request.data.get('zone_id')
+        if zone_id:
+            try:
+                zone = Zone.objects.get(id=zone_id, country=country)
+            except Zone.DoesNotExist:
+                return Response(
+                    {"error": "Zone introuvable ou n'appartient pas à votre pays."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        else:
+            zone = Zone.objects.filter(country=country).first()
+            if not zone:
+                return Response(
+                    {"error": "Aucune zone disponible dans votre pays."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        # ✅ Zone injectée via save() — le frontend n'envoie pas ce champ
+        serializer.save(zone=zone)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
 
 # ─────────────────────────────────────────────
 # HUISSIER
 # Créé par : Front Office
+# Zone déduite automatiquement depuis le front office connecté
 # SubZone doit appartenir à la Zone du Front Office
 # ─────────────────────────────────────────────
 
@@ -144,7 +179,7 @@ class FrontOfficeViewSet(viewsets.ModelViewSet):
     create=extend_schema(
         tags=["Staff - Huissier"],
         summary="Créer un huissier",
-        description="Réservé au front office. La subZone doit appartenir à sa zone.",
+        description="Réservé au front office. La zone est déduite automatiquement. La subZone doit appartenir à la zone du front office. Le frontend envoie : email, username, name, subZone, npi, phone, picture.",
     ),
     update=extend_schema(
         tags=["Staff - Huissier"],
@@ -196,7 +231,7 @@ class HuissierViewSet(viewsets.ModelViewSet):
         return Huissier.objects.none()
 
     def create(self, request, *args, **kwargs):
-        # ✅ Vérifier que la subZone appartient à la zone du front office
+        # ✅ Récupérer le front office connecté
         front_office = FrontOffice.objects.filter(user=request.user).first()
         if not front_office:
             return Response(
@@ -204,25 +239,24 @@ class HuissierViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # ✅ Vérifier que la subZone appartient à la zone du front office
         subzone_id = request.data.get('subZone')
         if subzone_id:
-            _, error = validate_subzone_belongs_to_front_office(subzone_id, front_office)
+            subzone, error = validate_subzone_belongs_to_front_office(subzone_id, front_office)
             if error:
                 return Response({"error": error}, status=status.HTTP_400_BAD_REQUEST)
 
-        # ✅ Forcer la zone du front office
-        data = request.data.copy()
-        data['zone'] = front_office.zone.id
-
-        serializer = self.get_serializer(data=data)
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        # ✅ Zone injectée via save() — le frontend n'envoie pas ce champ
+        serializer.save(zone=front_office.zone)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 # ─────────────────────────────────────────────
 # FINANCIAL ADVISOR
 # Créé par : Front Office
+# Zone déduite automatiquement depuis le front office connecté
 # SubZone doit appartenir à la Zone du Front Office
 # ─────────────────────────────────────────────
 
@@ -239,7 +273,7 @@ class HuissierViewSet(viewsets.ModelViewSet):
     create=extend_schema(
         tags=["Staff - Conseiller Financier"],
         summary="Créer un conseiller financier",
-        description="Réservé au front office. La subZone doit appartenir à sa zone.",
+        description="Réservé au front office. La zone est déduite automatiquement. La subZone doit appartenir à la zone du front office. Le frontend envoie : email, username, name, subZone, npi, phone, picture.",
     ),
     update=extend_schema(
         tags=["Staff - Conseiller Financier"],
@@ -291,7 +325,7 @@ class FinancialAdvisorViewSet(viewsets.ModelViewSet):
         return FinancialAdvisor.objects.none()
 
     def create(self, request, *args, **kwargs):
-        # ✅ Vérifier que la subZone appartient à la zone du front office
+        # ✅ Récupérer le front office connecté
         front_office = FrontOffice.objects.filter(user=request.user).first()
         if not front_office:
             return Response(
@@ -299,17 +333,15 @@ class FinancialAdvisorViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # ✅ Vérifier que la subZone appartient à la zone du front office
         subzone_id = request.data.get('subZone')
         if subzone_id:
-            _, error = validate_subzone_belongs_to_front_office(subzone_id, front_office)
+            subzone, error = validate_subzone_belongs_to_front_office(subzone_id, front_office)
             if error:
                 return Response({"error": error}, status=status.HTTP_400_BAD_REQUEST)
 
-        # ✅ Forcer la zone du front office
-        data = request.data.copy()
-        data['zone'] = front_office.zone.id
-
-        serializer = self.get_serializer(data=data)
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        # ✅ Zone injectée via save() — le frontend n'envoie pas ce champ
+        serializer.save(zone=front_office.zone)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
