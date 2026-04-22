@@ -17,7 +17,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiResponse
 from drf_spectacular.types import OpenApiTypes
 
-from .models import ScoreUser, AccountCredentials, PasswordResetCodeModel  # ✅ imports nettoyés
+from .models import ScoreUser, AccountCredentials, PasswordResetCodeModel
 from .serializers import (
     LoginSerializer,
     LoginResponseSerializer,
@@ -109,7 +109,8 @@ class VerifyPasswordSetupCredentials(APIView):
         except AccountCredentials.DoesNotExist:
             return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if account_cred.expiry_date < timezone.now():
+        # ✅ Utilisation de la property is_expired du modèle
+        if account_cred.is_expired:
             return Response({"error": "Token expired"}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response({"msg": "Token is valid"}, status=status.HTTP_200_OK)
@@ -160,11 +161,13 @@ class PasswordSetup(APIView):
         except AccountCredentials.DoesNotExist:
             return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if credentials.expiry_date < timezone.now():
+        # ✅ Utilisation de la property is_expired du modèle
+        if credentials.is_expired:
             return Response({"error": "Token expired"}, status=status.HTTP_400_BAD_REQUEST)
 
         user.set_password(password)
-        user.is_active = True
+        user.is_active        = True
+        user.password_changed = True
         user.save()
         credentials.delete()
 
@@ -202,8 +205,8 @@ class PasswordResetCode(APIView):
         if not email:
             return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        user       = get_object_or_404(ScoreUser, email=email)
-        today      = timezone.now().date()
+        user        = get_object_or_404(ScoreUser, email=email)
+        today       = timezone.now().date()
         codes_today = PasswordResetCodeModel.objects.filter(user=user, created_at__date=today)
 
         if codes_today.count() >= 4:
@@ -228,7 +231,13 @@ class PasswordResetCode(APIView):
 
         send_email({
             "subject": "Code de réinitialisation Score",
-            "message": f"Bonjour {user.username},\n\nVotre code de réinitialisation est : {code}\n\nCe code est valable 10 minutes.",
+            "message": (
+                f"Bonjour {user.username},\n\n"
+                f"Votre code de réinitialisation est : {code}\n\n"
+                f"Ce code est valable 10 minutes.\n\n"
+                f"Si vous n'avez pas demandé ce code, ignorez cet email.\n\n"
+                f"Cordialement,\nL'équipe SCORE"
+            ),
             "to": user.email
         })
 
@@ -275,7 +284,9 @@ class VerifyValidationCode(APIView):
         if not reset_code:
             return Response({"error": "Invalid code"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # ✅ Vérifier l'expiration AVANT de créer le token — et nettoyer le code expiré
         if reset_code.expiry_date < timezone.now():
+            reset_code.delete()
             return Response({"error": "Code expired"}, status=status.HTTP_400_BAD_REQUEST)
 
         token          = str(uuid.uuid4())
@@ -335,7 +346,9 @@ class ResetPassword(APIView):
         if not credentials:
             return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if credentials.expiry_date < timezone.now():
+        # ✅ Utilisation de la property is_expired + nettoyage du token expiré
+        if credentials.is_expired:
+            credentials.delete()
             return Response({"error": "Token expired"}, status=status.HTTP_400_BAD_REQUEST)
 
         user = credentials.user
@@ -357,7 +370,7 @@ class ChangePassword(APIView):
     @extend_schema(
         tags=["Auth"],
         summary="Changer le mot de passe",
-        description="Permet à un utilisateur authentifié de changer son mot de passe.",
+        description="Permet à un utilisateur authentifié de changer son mot de passe. Retourne de nouveaux tokens JWT.",
         request={
             "application/json": {
                 "type": "object",
@@ -369,7 +382,7 @@ class ChangePassword(APIView):
             }
         },
         responses={
-            200: OpenApiResponse(description="Mot de passe modifié avec succès"),
+            200: OpenApiResponse(description="Mot de passe modifié avec succès — nouveaux tokens retournés"),
             400: OpenApiResponse(description="Ancien mot de passe incorrect ou paramètres manquants"),
         },
     )
@@ -394,14 +407,20 @@ class ChangePassword(APIView):
         user.password_changed = True
         user.save()
 
+        # ✅ Nouveaux tokens JWT retournés — l'ancien token est invalidé
+        refresh = RefreshToken.for_user(user)
         return Response(
-            {"message": "Mot de passe modifié avec succès."},
+            {
+                "message":       "Mot de passe modifié avec succès.",
+                "access_token":  str(refresh.access_token),
+                "refresh_token": str(refresh),
+            },
             status=status.HTTP_200_OK
         )
 
 
 # ─────────────────────────────────────────────
-# PROFILE VIEW  ✅ RetrieveUpdateAPIView
+# PROFILE VIEW
 # ─────────────────────────────────────────────
 
 @extend_schema(
@@ -414,7 +433,7 @@ class ChangePassword(APIView):
         400: OpenApiResponse(description="Données invalides"),
     },
 )
-class ProfileView(generics.RetrieveUpdateAPIView):  # ✅ Retrieve + Update
+class ProfileView(generics.RetrieveUpdateAPIView):
     serializer_class   = UserProfileSerializer
     permission_classes = [IsAuthenticated]
 

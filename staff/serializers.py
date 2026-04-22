@@ -23,6 +23,38 @@ class BaseStaffSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Un compte avec cet email existe déjà.")
         return value
 
+    def validate_username(self, value):
+        # ✅ Unicité du username parmi tous les utilisateurs
+        if ScoreUser.objects.filter(username=value).exists():
+            raise serializers.ValidationError("Ce nom d'utilisateur est déjà utilisé.")
+        return value
+
+    def validate_npi(self, value):
+        if not value:
+            return value
+        # ✅ Unicité du NPI parmi tous les profils staff
+        npi_exists = (
+            FrontOffice.objects.filter(npi=value).exists() or
+            Huissier.objects.filter(npi=value).exists() or
+            FinancialAdvisor.objects.filter(npi=value).exists()
+        )
+        if npi_exists:
+            raise serializers.ValidationError("Ce NPI est déjà utilisé par un autre utilisateur.")
+        return value
+
+    def validate_phone(self, value):
+        if not value:
+            return value
+        # ✅ Unicité du téléphone parmi tous les profils staff
+        phone_exists = (
+            FrontOffice.objects.filter(phone=value).exists() or
+            Huissier.objects.filter(phone=value).exists() or
+            FinancialAdvisor.objects.filter(phone=value).exists()
+        )
+        if phone_exists:
+            raise serializers.ValidationError("Ce numéro de téléphone est déjà utilisé par un autre utilisateur.")
+        return value
+
     def _create_user(self, email, username, role):
         user = ScoreUser(
             email=email,
@@ -55,10 +87,10 @@ class FrontOfficeSerializer(BaseStaffSerializer):
         model  = FrontOffice
         fields = ['id', 'email', 'username', 'zone', 'name', 'npi', 'phone', 'is_active']
         extra_kwargs = {
-            'zone':      {'help_text': "ID de la zone existante", 'required': True},   # ✅ obligatoire
+            'zone':      {'help_text': "ID de la zone existante", 'required': True},
             'name':      {'help_text': "Nom du front office", 'required': False},
-            'npi':       {'help_text': "Numéro de pièce d'identité", 'required': False},
-            'phone':     {'help_text': "Numéro de téléphone", 'required': False},
+            'npi':       {'help_text': "Numéro de pièce d'identité (unique)", 'required': False},
+            'phone':     {'help_text': "Numéro de téléphone (unique)", 'required': False},
             'is_active': {'read_only': True},
         }
 
@@ -68,7 +100,8 @@ class FrontOfficeSerializer(BaseStaffSerializer):
         username = validated_data.pop('username')
         user     = self._create_user(email, username, role='front office')
         return FrontOffice.objects.create(user=user, **validated_data)
-    
+
+
 # ─────────────────────────────────────────────
 # HUISSIER
 # ─────────────────────────────────────────────
@@ -78,10 +111,10 @@ class HuissierSerializer(BaseStaffSerializer):
         model  = Huissier
         fields = ['id', 'email', 'username', 'zone', 'subZone', 'npi', 'phone', 'picture', 'is_active']
         extra_kwargs = {
-            'zone':      {'help_text': "ID de la zone", 'required': False, 'read_only': True},  # ✅ auto via front office
-            'subZone':   {'help_text': "ID de la sous-zone existante", 'required': True},        # ✅ obligatoire
-            'npi':       {'help_text': "Numéro de pièce d'identité", 'required': False},
-            'phone':     {'help_text': "Numéro de téléphone", 'required': False},
+            'zone':      {'help_text': "ID de la zone", 'required': False, 'read_only': True},
+            'subZone':   {'help_text': "ID de la sous-zone existante", 'required': True},
+            'npi':       {'help_text': "Numéro de pièce d'identité (unique)", 'required': False},
+            'phone':     {'help_text': "Numéro de téléphone (unique)", 'required': False},
             'picture':   {'help_text': "Photo de l'huissier", 'required': False},
             'is_active': {'read_only': True},
         }
@@ -93,21 +126,21 @@ class HuissierSerializer(BaseStaffSerializer):
         user     = self._create_user(email, username, role='huissier')
         return Huissier.objects.create(user=user, **validated_data)
 
+
 # ─────────────────────────────────────────────
 # FINANCIAL ADVISOR
 # ─────────────────────────────────────────────
-
 
 class FinancialAdvisorSerializer(BaseStaffSerializer):
     class Meta:
         model  = FinancialAdvisor
         fields = ['id', 'email', 'username', 'zone', 'subZone', 'name', 'npi', 'phone', 'picture', 'is_active']
         extra_kwargs = {
-            'zone':      {'help_text': "ID de la zone", 'required': False, 'read_only': True},  # ✅ auto via front office
-            'subZone':   {'help_text': "ID de la sous-zone existante", 'required': True},        # ✅ obligatoire
+            'zone':      {'help_text': "ID de la zone", 'required': False, 'read_only': True},
+            'subZone':   {'help_text': "ID de la sous-zone existante", 'required': True},
             'name':      {'help_text': "Nom du conseiller", 'required': False},
-            'npi':       {'help_text': "Numéro de pièce d'identité", 'required': False},
-            'phone':     {'help_text': "Numéro de téléphone", 'required': False},
+            'npi':       {'help_text': "Numéro de pièce d'identité (unique)", 'required': False},
+            'phone':     {'help_text': "Numéro de téléphone (unique)", 'required': False},
             'picture':   {'help_text': "Photo du conseiller", 'required': False},
             'is_active': {'read_only': True},
         }

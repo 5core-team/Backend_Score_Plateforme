@@ -30,7 +30,8 @@ def calculate_credit_score(customer: Customer) -> float:
     score_c1   = (done_debts / total_debts) * 40
 
     # ── Critère 2 — Taux de validation (20 pts) ───────────────────────
-    verified_debts = debts.filter(verified=True).count()
+    # ✅ Correction : validation_status='validated' au lieu de verified=True
+    verified_debts = debts.filter(validation_status='validated').count()
     score_c2       = (verified_debts / total_debts) * 20
 
     # ── Critère 3 — Respect des échéances (30 pts) ────────────────────

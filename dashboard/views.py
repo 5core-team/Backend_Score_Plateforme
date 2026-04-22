@@ -1,6 +1,5 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from django.db.models import Sum, Count
 
@@ -9,7 +8,7 @@ from staff.models import FrontOffice, Huissier, FinancialAdvisor
 from customers.models import Customer, Debt, Repayment, ConsultationSession, ConsultationOTP
 
 from drf_spectacular.utils import extend_schema
-from .permissions import IsSuperAdmin
+from .permissions import IsSuperAdmin, IsCountry, IsFrontOffice, IsHuissier, IsFinancialAdvisor
 
 
 # ─────────────────────────────────────────────
@@ -37,7 +36,8 @@ class SuperAdminDashboardView(APIView):
         expired_countries = total_countries - active_countries
 
         countries_detail = countries_qs.values('id', 'name', 'iso_code').annotate(
-            front_office_count=Count('zones__frontoffice', distinct=True),
+            # ✅ related_names corrects
+            front_office_count=Count('zones__frontoffices', distinct=True),
             customer_count=Count('zones__customers', distinct=True),
         )
 
@@ -63,8 +63,8 @@ class SuperAdminDashboardView(APIView):
         total_debts         = debts_qs.count()
         pending_debts       = debts_qs.filter(status='pending').count()
         done_debts          = debts_qs.filter(status='done').count()
-        verified_debts      = debts_qs.filter(validation_status='validated').count()          # ✅
-        unverified_debts    = debts_qs.filter(validation_status__in=['pending', 'rejected']).count()  # ✅
+        verified_debts      = debts_qs.filter(validation_status='validated').count()
+        unverified_debts    = debts_qs.filter(validation_status__in=['pending', 'rejected']).count()
         overdue_debts       = debts_qs.filter(status='pending', deadline__lt=now.date()).count()
         total_debt_amount   = debts_qs.aggregate(total=Sum('amount'))['total'] or 0
         pending_debt_amount = debts_qs.filter(status='pending').aggregate(total=Sum('amount'))['total'] or 0
@@ -125,16 +125,10 @@ class SuperAdminDashboardView(APIView):
     responses=None,
 )
 class CountryDashboardView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsCountry]
 
     def get(self, request):
         now = timezone.now()
-
-        if request.user.role != 'country':
-            return Response(
-                {"error": "Accès réservé au représentant pays."},
-                status=403
-            )
 
         try:
             country = Country.objects.get(manager=request.user)
@@ -153,7 +147,8 @@ class CountryDashboardView(APIView):
         zones        = Zone.objects.filter(country=country)
         zones_detail = zones.values('id', 'name').annotate(
             customer_count=Count('customers', distinct=True),
-            front_office_count=Count('frontoffice', distinct=True),
+            # ✅ related_name correct
+            front_office_count=Count('frontoffices', distinct=True),
         )
 
         total_front_offices  = FrontOffice.objects.filter(zone__country=country).count()
@@ -165,8 +160,7 @@ class CountryDashboardView(APIView):
         total_advisors  = FinancialAdvisor.objects.filter(zone__country=country).count()
         active_advisors = FinancialAdvisor.objects.filter(zone__country=country, is_active=True).count()
 
-        total_customers = Customer.objects.filter(zone__country=country).count()
-
+        total_customers   = Customer.objects.filter(zone__country=country).count()
         customers_by_zone = (
             Customer.objects
             .filter(zone__country=country)
@@ -175,14 +169,13 @@ class CountryDashboardView(APIView):
             .order_by('-count')
         )
 
-        debts_qs = Debt.objects.filter(customer__zone__country=country)
-
+        debts_qs            = Debt.objects.filter(customer__zone__country=country)
         total_debts         = debts_qs.count()
         pending_debts       = debts_qs.filter(status='pending').count()
         done_debts          = debts_qs.filter(status='done').count()
         overdue_debts       = debts_qs.filter(status='pending', deadline__lt=now.date()).count()
-        verified_debts      = debts_qs.filter(validation_status='validated').count()                  # ✅
-        unverified_debts    = debts_qs.filter(validation_status__in=['pending', 'rejected']).count()  # ✅
+        verified_debts      = debts_qs.filter(validation_status='validated').count()
+        unverified_debts    = debts_qs.filter(validation_status__in=['pending', 'rejected']).count()
         total_debt_amount   = debts_qs.aggregate(total=Sum('amount'))['total'] or 0
         pending_debt_amount = debts_qs.filter(status='pending').aggregate(total=Sum('amount'))['total'] or 0
 
@@ -250,16 +243,10 @@ class CountryDashboardView(APIView):
     responses=None,
 )
 class FrontOfficeDashboardView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsFrontOffice]
 
     def get(self, request):
         now = timezone.now()
-
-        if request.user.role != 'front office':
-            return Response(
-                {"error": "Accès réservé au front office."},
-                status=403
-            )
 
         try:
             front_office = FrontOffice.objects.get(user=request.user)
@@ -297,8 +284,8 @@ class FrontOfficeDashboardView(APIView):
         pending_debts       = debts_qs.filter(status='pending').count()
         done_debts          = debts_qs.filter(status='done').count()
         overdue_debts       = debts_qs.filter(status='pending', deadline__lt=now.date()).count()
-        verified_debts      = debts_qs.filter(validation_status='validated').count()                  # ✅
-        unverified_debts    = debts_qs.filter(validation_status__in=['pending', 'rejected']).count()  # ✅
+        verified_debts      = debts_qs.filter(validation_status='validated').count()
+        unverified_debts    = debts_qs.filter(validation_status__in=['pending', 'rejected']).count()
         total_debt_amount   = debts_qs.aggregate(total=Sum('amount'))['total'] or 0
         pending_debt_amount = debts_qs.filter(status='pending').aggregate(total=Sum('amount'))['total'] or 0
 
@@ -366,16 +353,10 @@ class FrontOfficeDashboardView(APIView):
     responses=None,
 )
 class HuissierDashboardView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsHuissier]
 
     def get(self, request):
         now = timezone.now()
-
-        if request.user.role != 'huissier':
-            return Response(
-                {"error": "Accès réservé aux huissiers."},
-                status=403
-            )
 
         try:
             huissier = Huissier.objects.get(user=request.user)
@@ -389,7 +370,8 @@ class HuissierDashboardView(APIView):
 
         debts_qs        = Debt.objects.filter(customer__huissier=huissier)
         total_debts     = debts_qs.count()
-        verified_debts  = debts_qs.filter(validation_status='validated').count()  # ✅
+        # ✅ validation_status='validated' au lieu de verified=True
+        verified_debts  = debts_qs.filter(validation_status='validated').count()
         taux_de_reponse = round((verified_debts / total_debts * 100), 1) if total_debts > 0 else 0
 
         total_consultations = ConsultationSession.objects.filter(
@@ -410,12 +392,13 @@ class HuissierDashboardView(APIView):
         overdue_dettes_suivies = dettes_suivies_qs.filter(
             status='pending', deadline__lt=now.date()
         ).count()
-        total_amount_suivies   = dettes_suivies_qs.aggregate(total=Sum('amount'))['total'] or 0
+        total_amount_suivies = dettes_suivies_qs.aggregate(total=Sum('amount'))['total'] or 0
 
         total_remboursements_suivis = Repayment.objects.filter(
             debt__customer__id__in=consulted_customer_ids
         ).count()
 
+        # ✅ OTPs filtrés sur les clients de CET huissier uniquement
         derniers_otps = (
             ConsultationOTP.objects
             .filter(customer__huissier=huissier)
@@ -485,16 +468,10 @@ class HuissierDashboardView(APIView):
     responses=None,
 )
 class FinancialAdvisorDashboardView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsFinancialAdvisor]
 
     def get(self, request):
         now = timezone.now()
-
-        if request.user.role != 'conseiller':
-            return Response(
-                {"error": "Accès réservé aux conseillers financiers."},
-                status=403
-            )
 
         try:
             advisor = FinancialAdvisor.objects.get(user=request.user)
@@ -508,14 +485,18 @@ class FinancialAdvisorDashboardView(APIView):
             created_by=request.user
         ).count()
 
-        otps_qs         = ConsultationOTP.objects.filter(customer__zone=advisor.zone)
+        # ✅ OTPs filtrés sur les consultations de CE conseiller uniquement
+        otps_qs        = ConsultationOTP.objects.filter(
+            customer__sessions__created_by=request.user
+        ).distinct()
         total_otps      = otps_qs.count()
         validated_otps  = otps_qs.filter(is_used=True).count()
         taux_de_reponse = round((validated_otps / total_otps * 100), 1) if total_otps > 0 else 0
 
         derniers_otps = (
             ConsultationOTP.objects
-            .filter(customer__zone=advisor.zone)
+            .filter(customer__sessions__created_by=request.user)
+            .distinct()
             .order_by('-created_at')[:10]
         )
 

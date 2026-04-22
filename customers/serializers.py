@@ -6,7 +6,7 @@ import random
 import uuid
 
 from .models import Customer, ConsultationOTP, ConsultationSession, Debt, Repayment
-from accounts.utils import send_email
+from accounts.utils import send_email, send_customer_creation_email
 
 
 # ─────────────────────────────────────────────
@@ -42,12 +42,38 @@ class CustomerSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'uuid':         {'read_only': True},
             'credit_score': {'read_only': True},
-            'zone':         {'read_only': True},    # ✅ déduit automatiquement
-            'subZone':      {'read_only': True},    # ✅ déduit automatiquement
-            'huissier':     {'read_only': True},    # ✅ déduit automatiquement
+            'zone':         {'read_only': True},
+            'subZone':      {'read_only': True},
+            'huissier':     {'read_only': True},
             'created_at':   {'read_only': True},
             'updated_at':   {'read_only': True},
         }
+
+    def get_fields(self):
+        fields = super().get_fields()
+
+        # ✅ Si le client existe déjà, les champs identitaires deviennent read_only
+        if self.instance is not None:
+            fields['first_name'].read_only   = True
+            fields['last_name'].read_only    = True
+            fields['email'].read_only        = True
+            fields['npi'].read_only          = True
+            fields['phone_number'].read_only = True
+
+        return fields
+
+    def create(self, validated_data):
+        customer = super().create(validated_data)
+
+        # ✅ Envoi de l'email de notification — même logique que staff/serializers.py
+        huissier_username = (
+            customer.huissier.user.username
+            if customer.huissier and customer.huissier.user
+            else "un huissier"
+        )
+        send_customer_creation_email(customer, huissier_username)
+
+        return customer
 
 
 # ─────────────────────────────────────────────
@@ -184,7 +210,7 @@ class RepaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Repayment
         fields = [
-            'uuid',              # ✅
+            'uuid',
             'debt',
             'date',
             'validation_status',
@@ -210,7 +236,7 @@ class DebtSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Debt
         fields = [
-            'uuid',              # ✅
+            'uuid',
             'id',
             'customer',
             'customer_uuid',

@@ -5,11 +5,11 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated, BasePermission, SAFE_METHODS
 from rest_framework.response import Response
 from django.utils import timezone
-from django.core.mail import send_mail
 from django.conf import settings
 from datetime import timedelta
 
 from drf_spectacular.utils import extend_schema_view, extend_schema, OpenApiResponse, OpenApiParameter
+from drf_spectacular.types import OpenApiTypes
 
 from .models import Customer, ConsultationOTP, ConsultationSession, Debt, Repayment
 from .serializers import (
@@ -21,6 +21,7 @@ from .serializers import (
     DebtSerializer,
     RepaymentSerializer,
 )
+from accounts.utils import send_email
 
 
 # ─────────────────────────────────────────────
@@ -37,11 +38,7 @@ class IsHuissierOrAdvisor(BasePermission):
         user = request.user
         if not user.is_authenticated:
             return False
-        if user.role == 'huissier':
-            return True
-        if user.role == 'conseiller' and request.method in SAFE_METHODS:
-            return True
-        return False
+        return user.role in ['huissier', 'conseiller']
 
 
 # ─────────────────────────────────────────────
@@ -80,7 +77,7 @@ def get_valid_session(session_token, customer_uuid):
     create=extend_schema(
         tags=["Customers"],
         summary="Créer un client",
-        description="Réservé à l'huissier uniquement. Zone, sous-zone et huissier sont déduits automatiquement.",
+        description="Réservé à l'huissier uniquement. Zone, sous-zone et huissier sont déduits automatiquement. Les informations de création ne sont plus modifiables après coup.",
         request=CustomerSerializer,
         responses={
             201: CustomerSerializer,
@@ -88,33 +85,17 @@ def get_valid_session(session_token, customer_uuid):
             403: OpenApiResponse(description="Permission refusée"),
         },
     ),
-    update=extend_schema(
-        tags=["Customers"],
-        summary="Modifier un client",
-        description="Réservé à l'huissier uniquement.",
-        request=CustomerSerializer,
-        responses={200: CustomerSerializer},
-    ),
-    partial_update=extend_schema(
-        tags=["Customers"],
-        summary="Modifier partiellement un client",
-        request=CustomerSerializer,
-        responses={200: CustomerSerializer},
-    ),
-    destroy=extend_schema(
-        tags=["Customers"],
-        summary="Supprimer un client",
-        description="Réservé à l'huissier uniquement.",
-        responses={204: OpenApiResponse(description="Client supprimé")},
-    ),
 )
 class CustomerViewSet(viewsets.ModelViewSet):
     serializer_class   = CustomerSerializer
     lookup_field       = 'uuid'
     lookup_value_regex = r'[0-9a-f-]+'
 
+    # ✅ PUT et PATCH autorisés mais champs identitaires bloqués via get_fields() dans le serializer
+    http_method_names = ['get', 'post', 'head', 'options']
+
     def get_permissions(self):
-        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+        if self.action == 'create':
             return [IsHuissier()]
         return [IsHuissierOrAdvisor()]
 
@@ -129,7 +110,6 @@ class CustomerViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         from staff.models import Huissier, FrontOffice
 
-        # ✅ Récupérer le profil huissier connecté
         try:
             huissier = Huissier.objects.get(user=request.user)
         except Huissier.DoesNotExist:
@@ -138,7 +118,6 @@ class CustomerViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # ✅ Récupérer la zone du front office qui a créé l'huissier
         front_office = FrontOffice.objects.filter(zone=huissier.zone).first()
         if not front_office:
             return Response(
@@ -146,7 +125,6 @@ class CustomerViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # ✅ Injecter automatiquement zone, subZone et huissier
         data = request.data.copy()
         data['zone']     = front_office.zone.id
         data['subZone']  = huissier.subZone.id if huissier.subZone else None
@@ -154,7 +132,8 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        customer = serializer.save()
+
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @extend_schema(
@@ -189,7 +168,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
     @extend_schema(
         tags=["Customers"],
         summary="Demander un code OTP de consultation",
-        description="Envoie un code OTP par mail au client pour autoriser la consultation.",
+        description="Accessible à l'huissier ET au conseiller financier. Envoie un code OTP par mail au client pour autoriser la consultation.",
         request=ConsultationOTPRequestSerializer,
         responses={
             200: OpenApiResponse(description="OTP envoyé au client"),
@@ -214,7 +193,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
     @extend_schema(
         tags=["Customers"],
         summary="Vérifier le code OTP et ouvrir une session de consultation",
-        description="Valide le code OTP et retourne un token de session valable 30 minutes.",
+        description="Accessible à l'huissier ET au conseiller financier. Valide le code OTP et retourne un token de session valable 30 minutes.",
         request=ConsultationOTPVerifySerializer,
         responses={
             200: OpenApiResponse(description="Session ouverte — token retourné"),
@@ -257,8 +236,17 @@ class CustomerViewSet(viewsets.ModelViewSet):
 @extend_schema_view(
     list=extend_schema(
         tags=["Customers - Dettes"],
-        summary="Lister les dettes",
-        description="Huissier + Conseiller → toutes les dettes (lecture seule pour conseiller).",
+        summary="Lister les dettes d'un client",
+        description="Retourne les dettes d'un client spécifique. Le paramètre customer_uuid est obligatoire.",
+        parameters=[
+            OpenApiParameter(
+                name='customer_uuid',
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="UUID du client dont on veut lister les dettes"
+            ),
+        ],
         responses={200: DebtSerializer(many=True)},
     ),
     retrieve=extend_schema(
@@ -305,12 +293,30 @@ class DebtViewSet(viewsets.ModelViewSet):
         return [IsHuissierOrAdvisor()]
 
     def get_queryset(self):
-        user = self.request.user
+        user          = self.request.user
+        customer_uuid = self.request.query_params.get('customer_uuid')
+
+        if not user.is_authenticated:
+            return Debt.objects.none()
+
+        if not customer_uuid:
+            return Debt.objects.none()
+
         if user.is_superuser:
-            return Debt.objects.all()
+            return Debt.objects.filter(customer__uuid=customer_uuid)
+
         if user.role in ['huissier', 'conseiller']:
-            return Debt.objects.all()
+            return Debt.objects.filter(customer__uuid=customer_uuid)
+
         return Debt.objects.none()
+
+    def list(self, request, *args, **kwargs):
+        if not request.query_params.get('customer_uuid'):
+            return Response(
+                {"error": "Le paramètre 'customer_uuid' est requis."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return super().list(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
         session_token = request.data.get('session_token')
@@ -397,9 +403,9 @@ class DebtViewSet(viewsets.ModelViewSet):
         validate_url = f"{base_url}/debts/validate/?token={token}"
         reject_url   = f"{base_url}/debts/reject/?token={token}"
 
-        send_mail(
-            subject        = "[SCORE] Confirmation d'enregistrement de dette",
-            message        = (
+        send_email({
+            "subject": "[SCORE] Confirmation d'enregistrement de dette",
+            "message": (
                 f"Bonjour {debt.customer.full_name},\n\n"
                 f"Une dette a été enregistrée à votre nom :\n"
                 f"- Montant       : {debt.amount}\n"
@@ -410,10 +416,8 @@ class DebtViewSet(viewsets.ModelViewSet):
                 f"Ce lien est valable 7 jours.\n\n"
                 f"Cordialement,\nL'équipe SCORE"
             ),
-            from_email     = settings.EMAIL_HOST_USER,
-            recipient_list = [debt.customer.email],
-            fail_silently  = False,
-        )
+            "to": debt.customer.email,
+        })
 
         return Response(
             {"message": "Lien de validation envoyé au client par email."},
@@ -428,7 +432,17 @@ class DebtViewSet(viewsets.ModelViewSet):
 @extend_schema_view(
     list=extend_schema(
         tags=["Customers - Remboursements"],
-        summary="Lister les remboursements",
+        summary="Lister les remboursements d'un client",
+        description="Retourne les remboursements d'un client spécifique. Le paramètre customer_uuid est obligatoire.",
+        parameters=[
+            OpenApiParameter(
+                name='customer_uuid',
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="UUID du client dont on veut lister les remboursements"
+            ),
+        ],
         responses={200: RepaymentSerializer(many=True)},
     ),
     retrieve=extend_schema(
@@ -475,12 +489,30 @@ class RepaymentViewSet(viewsets.ModelViewSet):
         return [IsHuissierOrAdvisor()]
 
     def get_queryset(self):
-        user = self.request.user
+        user          = self.request.user
+        customer_uuid = self.request.query_params.get('customer_uuid')
+
+        if not user.is_authenticated:
+            return Repayment.objects.none()
+
+        if not customer_uuid:
+            return Repayment.objects.none()
+
         if user.is_superuser:
-            return Repayment.objects.all()
+            return Repayment.objects.filter(debt__customer__uuid=customer_uuid)
+
         if user.role in ['huissier', 'conseiller']:
-            return Repayment.objects.all()
+            return Repayment.objects.filter(debt__customer__uuid=customer_uuid)
+
         return Repayment.objects.none()
+
+    def list(self, request, *args, **kwargs):
+        if not request.query_params.get('customer_uuid'):
+            return Response(
+                {"error": "Le paramètre 'customer_uuid' est requis."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return super().list(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
         session_token = request.data.get('session_token')
@@ -554,9 +586,9 @@ class RepaymentViewSet(viewsets.ModelViewSet):
         reject_url   = f"{base_url}/repayments/reject/?token={token}"
 
         customer = repayment.debt.customer
-        send_mail(
-            subject        = "[SCORE] Confirmation de remboursement",
-            message        = (
+        send_email({
+            "subject": "[SCORE] Confirmation de remboursement",
+            "message": (
                 f"Bonjour {customer.full_name},\n\n"
                 f"Un remboursement a été enregistré pour votre dette :\n"
                 f"- Date          : {repayment.date}\n"
@@ -566,10 +598,8 @@ class RepaymentViewSet(viewsets.ModelViewSet):
                 f"Ce lien est valable 7 jours.\n\n"
                 f"Cordialement,\nL'équipe SCORE"
             ),
-            from_email     = settings.EMAIL_HOST_USER,
-            recipient_list = [customer.email],
-            fail_silently  = False,
-        )
+            "to": customer.email,
+        })
 
         return Response(
             {"message": "Lien de validation envoyé au client par email."},
@@ -593,40 +623,19 @@ class DebtValidateView(APIView):
 
     def get(self, request):
         token = request.query_params.get('token')
-
         if not token:
-            return Response(
-                {"error": "Token manquant."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"error": "Token manquant."}, status=status.HTTP_400_BAD_REQUEST)
         try:
             debt = Debt.objects.get(validation_token=token)
         except Debt.DoesNotExist:
-            return Response(
-                {"error": "Lien invalide."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"error": "Lien invalide."}, status=status.HTTP_400_BAD_REQUEST)
         if not debt.is_validation_token_valid():
-            return Response(
-                {"error": "Ce lien a expiré ou a déjà été utilisé."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"error": "Ce lien a expiré ou a déjà été utilisé."}, status=status.HTTP_400_BAD_REQUEST)
         debt.validation_status       = 'validated'
         debt.validation_token        = None
         debt.validation_token_expiry = None
-        debt.save(update_fields=[
-            'validation_status',
-            'validation_token',
-            'validation_token_expiry',
-        ])
-
-        return Response(
-            {"message": "Dette validée avec succès. Merci."},
-            status=status.HTTP_200_OK
-        )
+        debt.save(update_fields=['validation_status', 'validation_token', 'validation_token_expiry'])
+        return Response({"message": "Dette validée avec succès. Merci."}, status=status.HTTP_200_OK)
 
 
 @extend_schema(
@@ -641,40 +650,19 @@ class DebtRejectView(APIView):
 
     def get(self, request):
         token = request.query_params.get('token')
-
         if not token:
-            return Response(
-                {"error": "Token manquant."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"error": "Token manquant."}, status=status.HTTP_400_BAD_REQUEST)
         try:
             debt = Debt.objects.get(validation_token=token)
         except Debt.DoesNotExist:
-            return Response(
-                {"error": "Lien invalide."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"error": "Lien invalide."}, status=status.HTTP_400_BAD_REQUEST)
         if not debt.is_validation_token_valid():
-            return Response(
-                {"error": "Ce lien a expiré ou a déjà été utilisé."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"error": "Ce lien a expiré ou a déjà été utilisé."}, status=status.HTTP_400_BAD_REQUEST)
         debt.validation_status       = 'rejected'
         debt.validation_token        = None
         debt.validation_token_expiry = None
-        debt.save(update_fields=[
-            'validation_status',
-            'validation_token',
-            'validation_token_expiry',
-        ])
-
-        return Response(
-            {"message": "Dette refusée. L'huissier sera notifié pour correction."},
-            status=status.HTTP_200_OK
-        )
+        debt.save(update_fields=['validation_status', 'validation_token', 'validation_token_expiry'])
+        return Response({"message": "Dette refusée. L'huissier sera notifié pour correction."}, status=status.HTTP_200_OK)
 
 
 # ─────────────────────────────────────────────
@@ -693,40 +681,19 @@ class RepaymentValidateView(APIView):
 
     def get(self, request):
         token = request.query_params.get('token')
-
         if not token:
-            return Response(
-                {"error": "Token manquant."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"error": "Token manquant."}, status=status.HTTP_400_BAD_REQUEST)
         try:
             repayment = Repayment.objects.get(validation_token=token)
         except Repayment.DoesNotExist:
-            return Response(
-                {"error": "Lien invalide."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"error": "Lien invalide."}, status=status.HTTP_400_BAD_REQUEST)
         if not repayment.is_validation_token_valid():
-            return Response(
-                {"error": "Ce lien a expiré ou a déjà été utilisé."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"error": "Ce lien a expiré ou a déjà été utilisé."}, status=status.HTTP_400_BAD_REQUEST)
         repayment.validation_status       = 'validated'
         repayment.validation_token        = None
         repayment.validation_token_expiry = None
-        repayment.save(update_fields=[
-            'validation_status',
-            'validation_token',
-            'validation_token_expiry',
-        ])
-
-        return Response(
-            {"message": "Remboursement validé avec succès. Merci."},
-            status=status.HTTP_200_OK
-        )
+        repayment.save(update_fields=['validation_status', 'validation_token', 'validation_token_expiry'])
+        return Response({"message": "Remboursement validé avec succès. Merci."}, status=status.HTTP_200_OK)
 
 
 @extend_schema(
@@ -741,37 +708,16 @@ class RepaymentRejectView(APIView):
 
     def get(self, request):
         token = request.query_params.get('token')
-
         if not token:
-            return Response(
-                {"error": "Token manquant."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"error": "Token manquant."}, status=status.HTTP_400_BAD_REQUEST)
         try:
             repayment = Repayment.objects.get(validation_token=token)
         except Repayment.DoesNotExist:
-            return Response(
-                {"error": "Lien invalide."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"error": "Lien invalide."}, status=status.HTTP_400_BAD_REQUEST)
         if not repayment.is_validation_token_valid():
-            return Response(
-                {"error": "Ce lien a expiré ou a déjà été utilisé."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"error": "Ce lien a expiré ou a déjà été utilisé."}, status=status.HTTP_400_BAD_REQUEST)
         repayment.validation_status       = 'rejected'
         repayment.validation_token        = None
         repayment.validation_token_expiry = None
-        repayment.save(update_fields=[
-            'validation_status',
-            'validation_token',
-            'validation_token_expiry',
-        ])
-
-        return Response(
-            {"message": "Remboursement refusé. L'huissier sera notifié pour correction."},
-            status=status.HTTP_200_OK
-        )
+        repayment.save(update_fields=['validation_status', 'validation_token', 'validation_token_expiry'])
+        return Response({"message": "Remboursement refusé. L'huissier sera notifié pour correction."}, status=status.HTTP_200_OK)
