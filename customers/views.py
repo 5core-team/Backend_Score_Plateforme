@@ -77,7 +77,7 @@ def get_valid_session(session_token, customer_uuid):
     create=extend_schema(
         tags=["Customers"],
         summary="Créer un client",
-        description="Réservé à l'huissier uniquement. Zone, sous-zone et huissier sont déduits automatiquement. Les informations de création ne sont plus modifiables après coup.",
+        description="Réservé à l'huissier uniquement. Zone, sous-zone et huissier sont déduits automatiquement depuis le profil de l'huissier connecté.",
         request=CustomerSerializer,
         responses={
             201: CustomerSerializer,
@@ -91,7 +91,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
     lookup_field       = 'uuid'
     lookup_value_regex = r'[0-9a-f-]+'
 
-    # ✅ PUT et PATCH autorisés mais champs identitaires bloqués via get_fields() dans le serializer
+    # ✅ Un client ne peut pas être modifié ou supprimé après création
     http_method_names = ['get', 'post', 'head', 'options']
 
     def get_permissions(self):
@@ -108,8 +108,9 @@ class CustomerViewSet(viewsets.ModelViewSet):
         return Customer.objects.none()
 
     def create(self, request, *args, **kwargs):
-        from staff.models import Huissier, FrontOffice
+        from staff.models import Huissier
 
+        # ✅ Récupérer le profil huissier connecté
         try:
             huissier = Huissier.objects.get(user=request.user)
         except Huissier.DoesNotExist:
@@ -118,21 +119,16 @@ class CustomerViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        front_office = FrontOffice.objects.filter(zone=huissier.zone).first()
-        if not front_office:
-            return Response(
-                {"error": "Aucun front office associé à la zone de cet huissier."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        data = request.data.copy()
-        data['zone']     = front_office.zone.id
-        data['subZone']  = huissier.subZone.id if huissier.subZone else None
-        data['huissier'] = huissier.id
-
-        serializer = self.get_serializer(data=data)
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        customer = serializer.save()
+
+        # ✅ zone, subZone et huissier injectés via save()
+        # Ces champs sont read_only dans le serializer — les passer via request.data serait ignoré
+        serializer.save(
+            zone     = huissier.zone,
+            subZone  = huissier.subZone,
+            huissier = huissier,
+        )
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -237,7 +233,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
     list=extend_schema(
         tags=["Customers - Dettes"],
         summary="Lister les dettes d'un client",
-        description="Retourne les dettes d'un client spécifique. Le paramètre customer_uuid est obligatoire.",
+        description="Retourne les dettes d'un client spécifique via son customer_uuid en paramètre.",
         parameters=[
             OpenApiParameter(
                 name='customer_uuid',
@@ -433,7 +429,7 @@ class DebtViewSet(viewsets.ModelViewSet):
     list=extend_schema(
         tags=["Customers - Remboursements"],
         summary="Lister les remboursements d'un client",
-        description="Retourne les remboursements d'un client spécifique. Le paramètre customer_uuid est obligatoire.",
+        description="Retourne les remboursements d'un client spécifique via son customer_uuid en paramètre.",
         parameters=[
             OpenApiParameter(
                 name='customer_uuid',

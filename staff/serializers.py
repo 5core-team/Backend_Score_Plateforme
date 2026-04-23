@@ -87,7 +87,10 @@ class FrontOfficeSerializer(BaseStaffSerializer):
         model  = FrontOffice
         fields = ['id', 'email', 'username', 'zone', 'name', 'npi', 'phone', 'is_active']
         extra_kwargs = {
-            'zone':      {'help_text': "ID de la zone existante", 'required': True},
+            'zone': {
+                'read_only': True,
+                'help_text': "Déduite automatiquement depuis le représentant pays connecté",
+            },
             'name':      {'help_text': "Nom du front office", 'required': False},
             'npi':       {'help_text': "Numéro de pièce d'identité (unique)", 'required': False},
             'phone':     {'help_text': "Numéro de téléphone (unique)", 'required': False},
@@ -109,13 +112,20 @@ class FrontOfficeSerializer(BaseStaffSerializer):
 class HuissierSerializer(BaseStaffSerializer):
     class Meta:
         model  = Huissier
-        fields = ['id', 'email', 'username', 'zone', 'subZone', 'npi', 'phone', 'picture', 'is_active']
+        # ✅ Champ picture supprimé
+        fields = ['id', 'email', 'username', 'zone', 'subZone', 'name', 'npi', 'phone', 'is_active']
         extra_kwargs = {
-            'zone':      {'help_text': "ID de la zone", 'required': False, 'read_only': True},
-            'subZone':   {'help_text': "ID de la sous-zone existante", 'required': True},
+            'zone': {
+                'read_only': True,
+                'help_text': "Déduite automatiquement depuis le front office connecté",
+            },
+            'subZone': {
+                'help_text': "ID de la sous-zone (doit appartenir à la zone du front office)",
+                'required':  True,
+            },
+            'name':      {'help_text': "Nom de l'huissier", 'required': False},
             'npi':       {'help_text': "Numéro de pièce d'identité (unique)", 'required': False},
             'phone':     {'help_text': "Numéro de téléphone (unique)", 'required': False},
-            'picture':   {'help_text': "Photo de l'huissier", 'required': False},
             'is_active': {'read_only': True},
         }
 
@@ -134,14 +144,20 @@ class HuissierSerializer(BaseStaffSerializer):
 class FinancialAdvisorSerializer(BaseStaffSerializer):
     class Meta:
         model  = FinancialAdvisor
-        fields = ['id', 'email', 'username', 'zone', 'subZone', 'name', 'npi', 'phone', 'picture', 'is_active']
+        # ✅ Champ picture supprimé
+        fields = ['id', 'email', 'username', 'zone', 'subZone', 'name', 'npi', 'phone', 'is_active']
         extra_kwargs = {
-            'zone':      {'help_text': "ID de la zone", 'required': False, 'read_only': True},
-            'subZone':   {'help_text': "ID de la sous-zone existante", 'required': True},
-            'name':      {'help_text': "Nom du conseiller", 'required': False},
+            'zone': {
+                'read_only': True,
+                'help_text': "Déduite automatiquement depuis le front office connecté",
+            },
+            'subZone': {
+                'help_text': "ID de la sous-zone (doit appartenir à la zone du front office)",
+                'required':  True,
+            },
+            'name':      {'help_text': "Nom du conseiller financier", 'required': False},
             'npi':       {'help_text': "Numéro de pièce d'identité (unique)", 'required': False},
             'phone':     {'help_text': "Numéro de téléphone (unique)", 'required': False},
-            'picture':   {'help_text': "Photo du conseiller", 'required': False},
             'is_active': {'read_only': True},
         }
 
