@@ -131,8 +131,12 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'score_db',
+        'USER': 'score_user',
+        'PASSWORD': 'MotDePasseFort123!',
+        'HOST': 'localhost',
+        'PORT': '3306',
     }
 }
 
