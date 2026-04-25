@@ -42,30 +42,25 @@ class CustomerSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'uuid':         {'read_only': True},
             'credit_score': {'read_only': True},
-            'zone':         {'read_only': True},    # ✅ déduit automatiquement
-            'subZone':      {'read_only': True},    # ✅ déduit automatiquement
-            'huissier':     {'read_only': True},    # ✅ déduit automatiquement
+            'zone':         {'read_only': True},
+            'subZone':      {'read_only': True},
+            'huissier':     {'read_only': True},
             'created_at':   {'read_only': True},
             'updated_at':   {'read_only': True},
         }
 
     def get_fields(self):
         fields = super().get_fields()
-
-        # ✅ Si le client existe déjà, les champs identitaires deviennent read_only
         if self.instance is not None:
             fields['first_name'].read_only   = True
             fields['last_name'].read_only    = True
             fields['email'].read_only        = True
             fields['npi'].read_only          = True
             fields['phone_number'].read_only = True
-
         return fields
 
     def create(self, validated_data):
         customer = super().create(validated_data)
-
-        # ✅ Récupérer le nom de l'huissier — nom profil en priorité, sinon username
         if customer.huissier and customer.huissier.user:
             huissier_username = (
                 customer.huissier.name
@@ -74,9 +69,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             )
         else:
             huissier_username = "un huissier"
-
         send_customer_creation_email(customer, huissier_username)
-
         return customer
 
 
@@ -221,9 +214,9 @@ class RepaymentSerializer(serializers.ModelSerializer):
         ]
         extra_kwargs = {
             'uuid':              {'read_only': True},
-            'debt':              {'help_text': "ID de la dette"},
-            'date':              {'help_text': "Date du remboursement"},
-            'validation_status': {'read_only': True, 'help_text': "Statut de validation"},
+            'debt':              {'read_only': True, 'help_text': "Déduit automatiquement depuis debt_uuid"},
+            'date':              {'help_text': "Date du remboursement (YYYY-MM-DD)"},
+            'validation_status': {'read_only': True, 'help_text': "Statut : pending | validated | rejected"},
         }
 
 
@@ -235,24 +228,44 @@ class DebtSerializer(serializers.ModelSerializer):
     repayments    = RepaymentSerializer(many=True, read_only=True)
     customer_name = serializers.CharField(source='customer.full_name', read_only=True)
     customer_uuid = serializers.UUIDField(source='customer.uuid', read_only=True)
-    creditor_name = serializers.CharField(source='creditor.full_name', read_only=True)
+    creditor_name = serializers.CharField(
+        source='creditor.full_name',
+        read_only=True,
+        default=None
+    )
+
+    # ✅ Champs write_only visibles dans Swagger — gérés par la vue, supprimés avant save()
+    session_token = serializers.CharField(
+        write_only=True,
+        required=True,
+        help_text="Token de session OTP valide — récupéré depuis la réponse de verify-otp"
+    )
+    customer_uuid_field = serializers.UUIDField(
+        write_only=True,
+        required=True,
+        help_text="UUID du client — récupéré depuis la réponse de verify-otp"
+    )
 
     class Meta:
         model  = Debt
         fields = [
             'uuid',
             'id',
-            'customer',
-            'customer_uuid',
-            'customer_name',
+            # ✅ Champs à envoyer par le frontend
+            'session_token',
+            'customer_uuid_field',
             'creditor',
-            'creditor_name',
             'amount',
             'deadline_amount',
             'periodicity',
             'deadline',
-            'verified',
             'status',
+            # ✅ Champs retournés en réponse uniquement
+            'customer',
+            'customer_uuid',
+            'customer_name',
+            'creditor_name',
+            'verified',
             'validation_status',
             'is_monitored',
             'created_at',
@@ -260,17 +273,31 @@ class DebtSerializer(serializers.ModelSerializer):
             'repayments',
         ]
         extra_kwargs = {
-            'uuid':              {'read_only': True},
-            'customer':          {'write_only': True, 'help_text': "ID du client débiteur"},
-            'creditor':          {'write_only': True, 'help_text': "ID du client créditeur", 'required': False},
-            'amount':            {'help_text': "Montant de la dette"},
-            'deadline_amount':   {'help_text': "Montant dû à l'échéance"},
-            'periodicity':       {'help_text': "Périodicité de remboursement"},
-            'deadline':          {'help_text': "Date limite de remboursement"},
-            'verified':          {'read_only': True, 'help_text': "Dette vérifiée ou non"},
-            'status':            {'help_text': "Statut : pending ou done"},
-            'validation_status': {'read_only': True, 'help_text': "Statut de validation"},
-            'is_monitored':      {'read_only': True, 'help_text': "Suivi activé ou non"},
+            'uuid': {'read_only': True},
+            'customer': {
+                'read_only': True,
+                'help_text': "Déduit automatiquement depuis la session — ne pas envoyer",
+            },
+            'creditor': {
+                'write_only': True,
+                'help_text':  "ID du client créditeur (optionnel)",
+                'required':   False,
+                'allow_null': True,
+            },
+            'amount':            {'help_text': "Montant total de la dette (ex: 150000.00)"},
+            'deadline_amount':   {'help_text': "Montant dû à chaque échéance (ex: 12500.00)"},
+            'periodicity':       {'help_text': "Fréquence : daily | weekly | monthly | quarterly | biannual | annual"},
+            'deadline':          {'help_text': "Date limite de remboursement (YYYY-MM-DD)"},
+            'status':            {'help_text': "Statut à la création : toujours 'pending'"},
+            'verified':          {'read_only': True, 'help_text': "True si validée par le client"},
+            'validation_status': {'read_only': True, 'help_text': "pending | validated | rejected"},
+            'is_monitored':      {'read_only': True, 'help_text': "Suivi activé — false par défaut"},
             'created_at':        {'read_only': True},
             'updated_at':        {'read_only': True},
         }
+
+    def validate(self, attrs):
+        # ✅ Supprimer les champs Swagger-only avant la sauvegarde
+        attrs.pop('session_token', None)
+        attrs.pop('customer_uuid_field', None)
+        return attrs
