@@ -224,6 +224,7 @@ class RepaymentSerializer(serializers.ModelSerializer):
             # ✅ Champs à envoyer par le frontend
             'session_token',
             'debt_uuid',
+            'amount',
             'date',
             # ✅ Champs retournés en réponse uniquement
             'debt',
@@ -232,6 +233,7 @@ class RepaymentSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'uuid':              {'read_only': True},
             'debt':              {'read_only': True, 'help_text': "Déduit automatiquement depuis debt_uuid"},
+            'amount':            {'help_text': "Montant remboursé lors de ce versement (ex: 5000.00)"},
             'date':              {'help_text': "Date du remboursement (YYYY-MM-DD)"},
             'validation_status': {'read_only': True, 'help_text': "Statut : pending | validated | rejected"},
         }

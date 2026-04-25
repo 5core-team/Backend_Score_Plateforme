@@ -112,7 +112,7 @@ class Debt(models.Model):
         ('rejected',  'Refusée par le client'),
     ]
 
-    uuid            = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)  # ✅
+    uuid            = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     customer        = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, related_name='debts')
     creditor        = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, related_name="receivables")
     amount          = models.DecimalField(max_digits=10, decimal_places=2)
@@ -182,9 +182,16 @@ class Repayment(models.Model):
         ('rejected',  'Refusé par le client'),
     ]
 
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)  # ✅
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     debt = models.ForeignKey(Debt, on_delete=models.CASCADE, related_name='repayments')
     date = models.DateField()
+
+    # ✅ Montant du versement — permet de calculer si la dette est entièrement remboursée
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text="Montant remboursé lors de ce versement"
+    )
 
     validation_status = models.CharField(
         max_length=10,

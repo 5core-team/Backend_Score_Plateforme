@@ -357,7 +357,7 @@ class DebtViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         session_token = request.data.get('session_token')
-        # ✅ CORRECTION : customer_uuid_field — nom exact du champ dans le serializer
+        # ✅ customer_uuid_field — nom exact du champ dans le serializer
         customer_uuid = request.data.get('customer_uuid_field')
 
         if not session_token:
@@ -379,7 +379,7 @@ class DebtViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        # ✅ customer déduit depuis la session — le frontend ne l'envoie pas
+        # ✅ customer déduit depuis la session
         serializer.save(customer=session.customer)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -506,6 +506,7 @@ class DebtViewSet(viewsets.ModelViewSet):
             "**Champs à envoyer :**\n"
             "- `session_token` : token retourné par verify-otp\n"
             "- `debt_uuid` : UUID de la dette concernée\n"
+            "- `amount` : montant du versement (ex: 5000.00)\n"
             "- `date` : date du remboursement (YYYY-MM-DD)"
         ),
         request=RepaymentSerializer,
@@ -515,6 +516,7 @@ class DebtViewSet(viewsets.ModelViewSet):
                 value={
                     "session_token": "550e8400-e29b-41d4-a716-446655440000",
                     "debt_uuid":     "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                    "amount":        "5000.00",
                     "date":          "2026-04-25",
                 },
                 request_only=True,
@@ -530,6 +532,7 @@ class DebtViewSet(viewsets.ModelViewSet):
                         value={
                             "uuid":              "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                             "debt":              1,
+                            "amount":            "5000.00",
                             "date":              "2026-04-25",
                             "validation_status": "pending",
                         },
@@ -623,7 +626,7 @@ class RepaymentViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        # ✅ debt injecté via save() — le frontend envoie seulement debt_uuid + date + session_token
+        # ✅ debt injecté via save()
         serializer.save(debt=debt)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -648,7 +651,10 @@ class RepaymentViewSet(viewsets.ModelViewSet):
     @extend_schema(
         tags=["Customers - Remboursements"],
         summary="Envoyer le lien de validation d'un remboursement",
-        description="Envoie un lien unique au client pour valider ou refuser le remboursement.",
+        description=(
+            "Envoie un lien unique au client pour valider ou refuser le remboursement. "
+            "L'email contient le montant du versement et le montant total de la dette."
+        ),
         request=None,
         responses=None,
     )
@@ -673,8 +679,9 @@ class RepaymentViewSet(viewsets.ModelViewSet):
             "message": (
                 f"Bonjour {customer.full_name},\n\n"
                 f"Un remboursement a été enregistré pour votre dette :\n"
-                f"- Date          : {repayment.date}\n"
-                f"- Montant dette : {repayment.debt.amount}\n\n"
+                f"- Montant versé  : {repayment.amount}\n"
+                f"- Date           : {repayment.date}\n"
+                f"- Montant dette  : {repayment.debt.amount}\n\n"
                 f"Pour VALIDER ce remboursement, cliquez ici :\n{validate_url}\n\n"
                 f"Pour REFUSER ce remboursement, cliquez ici :\n{reject_url}\n\n"
                 f"Ce lien est valable 7 jours.\n\n"
@@ -771,10 +778,25 @@ class RepaymentValidateView(APIView):
             return Response({"error": "Lien invalide."}, status=status.HTTP_400_BAD_REQUEST)
         if not repayment.is_validation_token_valid():
             return Response({"error": "Ce lien a expiré ou a déjà été utilisé."}, status=status.HTTP_400_BAD_REQUEST)
+
         repayment.validation_status       = 'validated'
         repayment.validation_token        = None
         repayment.validation_token_expiry = None
         repayment.save(update_fields=['validation_status', 'validation_token', 'validation_token_expiry'])
+
+        # ✅ Vérifier si la dette est entièrement remboursée
+        # Somme de tous les remboursements validés >= montant total de la dette → status = 'done'
+        from django.db.models import Sum
+        debt            = repayment.debt
+        total_rembourse = Repayment.objects.filter(
+            debt=debt,
+            validation_status='validated'
+        ).aggregate(total=Sum('amount'))['total'] or 0
+
+        if total_rembourse >= debt.amount:
+            debt.status = 'done'
+            debt.save(update_fields=['status'])
+
         return Response({"message": "Remboursement validé avec succès. Merci."}, status=status.HTTP_200_OK)
 
 
