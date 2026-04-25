@@ -91,7 +91,6 @@ class CustomerViewSet(viewsets.ModelViewSet):
     lookup_field       = 'uuid'
     lookup_value_regex = r'[0-9a-f-]+'
 
-    # ✅ Un client ne peut pas être modifié ou supprimé après création
     http_method_names = ['get', 'post', 'head', 'options']
 
     def get_permissions(self):
@@ -120,7 +119,6 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        # ✅ zone, subZone et huissier déduits depuis le profil huissier connecté
         serializer.save(
             zone     = huissier.zone,
             subZone  = huissier.subZone,
@@ -258,6 +256,22 @@ class CustomerViewSet(viewsets.ModelViewSet):
             "- `status` : toujours 'pending' à la création"
         ),
         request=DebtSerializer,
+        examples=[
+            OpenApiExample(
+                name="Créer une dette",
+                value={
+                    "session_token":       "550e8400-e29b-41d4-a716-446655440000",
+                    "customer_uuid_field": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                    "creditor":            None,
+                    "amount":              "150000.00",
+                    "deadline_amount":     "12500.00",
+                    "periodicity":         "monthly",
+                    "deadline":            "2027-04-25",
+                    "status":              "pending",
+                },
+                request_only=True,
+            )
+        ],
         responses={
             201: OpenApiResponse(
                 description="Dette créée avec succès",
@@ -266,23 +280,23 @@ class CustomerViewSet(viewsets.ModelViewSet):
                     OpenApiExample(
                         name="Exemple de dette créée",
                         value={
-                            "uuid": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                            "id": 1,
-                            "customer": 1,
-                            "customer_uuid": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                            "customer_name": "Dora Barbouche",
-                            "creditor_name": None,
-                            "amount": "150000.00",
-                            "deadline_amount": "12500.00",
-                            "periodicity": "monthly",
-                            "deadline": "2027-04-25",
-                            "verified": False,
-                            "status": "pending",
-                            "validation_status": "pending",
-                            "is_monitored": False,
-                            "created_at": "2026-04-25",
-                            "updated_at": "2026-04-25",
-                            "repayments": []
+                            "uuid":             "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "id":               1,
+                            "customer":         1,
+                            "customer_uuid":    "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "customer_name":    "Dora Barbouche",
+                            "creditor_name":    None,
+                            "amount":           "150000.00",
+                            "deadline_amount":  "12500.00",
+                            "periodicity":      "monthly",
+                            "deadline":         "2027-04-25",
+                            "verified":         False,
+                            "status":           "pending",
+                            "validation_status":"pending",
+                            "is_monitored":     False,
+                            "created_at":       "2026-04-25",
+                            "updated_at":       "2026-04-25",
+                            "repayments":       []
                         },
                         response_only=True,
                     )
@@ -343,6 +357,7 @@ class DebtViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         session_token = request.data.get('session_token')
+        # ✅ CORRECTION : customer_uuid_field — nom exact du champ dans le serializer
         customer_uuid = request.data.get('customer_uuid_field')
 
         if not session_token:
@@ -494,6 +509,17 @@ class DebtViewSet(viewsets.ModelViewSet):
             "- `date` : date du remboursement (YYYY-MM-DD)"
         ),
         request=RepaymentSerializer,
+        examples=[
+            OpenApiExample(
+                name="Créer un remboursement",
+                value={
+                    "session_token": "550e8400-e29b-41d4-a716-446655440000",
+                    "debt_uuid":     "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                    "date":          "2026-04-25",
+                },
+                request_only=True,
+            )
+        ],
         responses={
             201: OpenApiResponse(
                 description="Remboursement créé avec succès",
@@ -502,9 +528,9 @@ class DebtViewSet(viewsets.ModelViewSet):
                     OpenApiExample(
                         name="Exemple de remboursement créé",
                         value={
-                            "uuid": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                            "debt": 1,
-                            "date": "2026-04-25",
+                            "uuid":              "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "debt":              1,
+                            "date":              "2026-04-25",
                             "validation_status": "pending",
                         },
                         response_only=True,

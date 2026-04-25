@@ -204,12 +204,29 @@ class ConsultationSessionSerializer(serializers.ModelSerializer):
 # ─────────────────────────────────────────────
 
 class RepaymentSerializer(serializers.ModelSerializer):
+
+    # ✅ Champs write_only visibles dans Swagger — gérés par la vue, supprimés avant save()
+    session_token = serializers.CharField(
+        write_only=True,
+        required=True,
+        help_text="Token de session OTP valide — récupéré depuis la réponse de verify-otp"
+    )
+    debt_uuid = serializers.UUIDField(
+        write_only=True,
+        required=True,
+        help_text="UUID de la dette concernée par le remboursement"
+    )
+
     class Meta:
         model  = Repayment
         fields = [
             'uuid',
-            'debt',
+            # ✅ Champs à envoyer par le frontend
+            'session_token',
+            'debt_uuid',
             'date',
+            # ✅ Champs retournés en réponse uniquement
+            'debt',
             'validation_status',
         ]
         extra_kwargs = {
@@ -218,6 +235,12 @@ class RepaymentSerializer(serializers.ModelSerializer):
             'date':              {'help_text': "Date du remboursement (YYYY-MM-DD)"},
             'validation_status': {'read_only': True, 'help_text': "Statut : pending | validated | rejected"},
         }
+
+    def validate(self, attrs):
+        # ✅ Supprimer les champs Swagger-only avant la sauvegarde
+        attrs.pop('session_token', None)
+        attrs.pop('debt_uuid', None)
+        return attrs
 
 
 # ─────────────────────────────────────────────
