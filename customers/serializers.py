@@ -59,6 +59,23 @@ class CustomerSerializer(serializers.ModelSerializer):
             fields['phone_number'].read_only = True
         return fields
 
+    def validate_email(self, value):
+        # ✅ Vérifier que l'email n'est pas déjà utilisé par un utilisateur du système
+        from accounts.models import ScoreUser
+        if ScoreUser.objects.filter(email=value).exists():
+            raise serializers.ValidationError(
+                "Cet email est déjà utilisé par un utilisateur du système."
+            )
+        # ✅ Vérifier que l'email n'est pas déjà utilisé par un autre client
+        qs = Customer.objects.filter(email=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError(
+                "Un client avec cet email existe déjà."
+            )
+        return value
+
     def create(self, validated_data):
         customer = super().create(validated_data)
         if customer.huissier and customer.huissier.user:
@@ -221,12 +238,10 @@ class RepaymentSerializer(serializers.ModelSerializer):
         model  = Repayment
         fields = [
             'uuid',
-            # ✅ Champs à envoyer par le frontend
             'session_token',
             'debt_uuid',
             'amount',
             'date',
-            # ✅ Champs retournés en réponse uniquement
             'debt',
             'validation_status',
         ]
@@ -239,7 +254,6 @@ class RepaymentSerializer(serializers.ModelSerializer):
         }
 
     def validate(self, attrs):
-        # ✅ Supprimer les champs Swagger-only avant la sauvegarde
         attrs.pop('session_token', None)
         attrs.pop('debt_uuid', None)
         return attrs
@@ -259,7 +273,7 @@ class DebtSerializer(serializers.ModelSerializer):
         default=None
     )
 
-    # ✅ Champs write_only visibles dans Swagger — gérés par la vue, supprimés avant save()
+    # ✅ Champs write_only visibles dans Swagger
     session_token = serializers.CharField(
         write_only=True,
         required=True,
@@ -276,7 +290,6 @@ class DebtSerializer(serializers.ModelSerializer):
         fields = [
             'uuid',
             'id',
-            # ✅ Champs à envoyer par le frontend
             'session_token',
             'customer_uuid_field',
             'creditor',
@@ -285,7 +298,6 @@ class DebtSerializer(serializers.ModelSerializer):
             'periodicity',
             'deadline',
             'status',
-            # ✅ Champs retournés en réponse uniquement
             'customer',
             'customer_uuid',
             'customer_name',
@@ -322,7 +334,6 @@ class DebtSerializer(serializers.ModelSerializer):
         }
 
     def validate(self, attrs):
-        # ✅ Supprimer les champs Swagger-only avant la sauvegarde
         attrs.pop('session_token', None)
         attrs.pop('customer_uuid_field', None)
         return attrs

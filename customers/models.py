@@ -13,7 +13,8 @@ class Customer(models.Model):
     uuid         = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     first_name   = models.CharField(max_length=100)
     last_name    = models.CharField(max_length=100)
-    email        = models.EmailField(max_length=50)
+    # ✅ CORRECTION : email unique — impossible d'utiliser le même email pour 2 clients
+    email        = models.EmailField(max_length=50, unique=True)
     npi          = models.CharField(max_length=100, unique=True, verbose_name="National Person ID")
     phone_number = models.CharField(max_length=20, null=True, blank=True)
     credit_score = models.FloatField(default=0.0)
@@ -182,11 +183,10 @@ class Repayment(models.Model):
         ('rejected',  'Refusé par le client'),
     ]
 
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    debt = models.ForeignKey(Debt, on_delete=models.CASCADE, related_name='repayments')
-    date = models.DateField()
-
-    # ✅ Montant du versement — permet de calculer si la dette est entièrement remboursée
+    uuid   = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    debt   = models.ForeignKey(Debt, on_delete=models.CASCADE, related_name='repayments')
+    date   = models.DateField()
+    # ✅ Montant du versement
     amount = models.DecimalField(
         max_digits=12,
         decimal_places=2,
