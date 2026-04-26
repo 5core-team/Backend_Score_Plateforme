@@ -13,10 +13,12 @@ class Customer(models.Model):
     uuid         = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     first_name   = models.CharField(max_length=100)
     last_name    = models.CharField(max_length=100)
-    # ✅ CORRECTION : email unique — impossible d'utiliser le même email pour 2 clients
+    # ✅ email unique — impossible d'utiliser le même email pour 2 clients ou pour un staff
     email        = models.EmailField(max_length=50, unique=True)
+    # ✅ npi unique
     npi          = models.CharField(max_length=100, unique=True, verbose_name="National Person ID")
-    phone_number = models.CharField(max_length=20, null=True, blank=True)
+    # ✅ phone_number unique
+    phone_number = models.CharField(max_length=20, null=True, blank=True, unique=True)
     credit_score = models.FloatField(default=0.0)
 
     zone     = models.ForeignKey(Zone,     on_delete=models.SET_NULL, null=True, related_name="customers")

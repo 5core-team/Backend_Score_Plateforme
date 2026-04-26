@@ -51,6 +51,7 @@ class CustomerSerializer(serializers.ModelSerializer):
 
     def get_fields(self):
         fields = super().get_fields()
+        # ✅ Champs identitaires non modifiables après création
         if self.instance is not None:
             fields['first_name'].read_only   = True
             fields['last_name'].read_only    = True
@@ -73,6 +74,30 @@ class CustomerSerializer(serializers.ModelSerializer):
         if qs.exists():
             raise serializers.ValidationError(
                 "Un client avec cet email existe déjà."
+            )
+        return value
+
+    def validate_npi(self, value):
+        # ✅ Vérifier que le NPI n'est pas déjà utilisé par un autre client
+        qs = Customer.objects.filter(npi=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError(
+                "Un client avec ce NPI existe déjà."
+            )
+        return value
+
+    def validate_phone_number(self, value):
+        if not value:
+            return value
+        # ✅ Vérifier que le téléphone n'est pas déjà utilisé par un autre client
+        qs = Customer.objects.filter(phone_number=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError(
+                "Un client avec ce numéro de téléphone existe déjà."
             )
         return value
 
@@ -273,7 +298,7 @@ class DebtSerializer(serializers.ModelSerializer):
         default=None
     )
 
-    # ✅ Champs write_only visibles dans Swagger
+    # ✅ Champs write_only visibles dans Swagger — gérés par la vue, supprimés avant save()
     session_token = serializers.CharField(
         write_only=True,
         required=True,
