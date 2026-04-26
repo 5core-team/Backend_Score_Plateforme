@@ -38,7 +38,15 @@ class SubscriptionSerializer(serializers.ModelSerializer):
 class CountrySerializer(serializers.ModelSerializer):
     email    = serializers.EmailField(write_only=True, help_text="Email du manager du pays")
     username = serializers.CharField(max_length=100, write_only=True, help_text="Nom d'utilisateur du manager")
-    has_valid_subscription = serializers.BooleanField(read_only=True, help_text="Abonnement valide ou non")
+
+    # ✅ CORRECTION : SerializerMethodField au lieu de BooleanField
+    # has_valid_subscription est une @property dans le modèle — pas un champ DB
+    has_valid_subscription = serializers.SerializerMethodField(
+        help_text="Abonnement valide ou non"
+    )
+
+    def get_has_valid_subscription(self, obj):
+        return obj.has_valid_subscription
 
     class Meta:
         model  = Country
@@ -125,8 +133,6 @@ class ZoneSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'country', 'country_name']
         extra_kwargs = {
             'country': {
-                # ✅ Le pays est injecté automatiquement depuis le représentant pays connecté
-                # Le frontend n'envoie que 'name'
                 'read_only': True,
                 'help_text': "Déduit automatiquement depuis le représentant pays connecté",
             },
@@ -155,8 +161,6 @@ class SubZoneSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'zone', 'zone_name', 'country_name']
         extra_kwargs = {
             'zone': {
-                # ✅ La zone est injectée automatiquement depuis le front office connecté
-                # Le frontend n'envoie que 'name'
                 'read_only': True,
                 'help_text': "Déduite automatiquement depuis le front office connecté",
             },
