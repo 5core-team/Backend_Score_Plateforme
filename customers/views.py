@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.conf import settings
 from datetime import timedelta
 
-from drf_spectacular.utils import extend_schema_view, extend_schema, OpenApiResponse, OpenApiParameter
+from drf_spectacular.utils import extend_schema_view, extend_schema, OpenApiResponse, OpenApiParameter, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
 
 from .models import Customer, ConsultationOTP, ConsultationSession, Debt, Repayment
@@ -91,7 +91,6 @@ class CustomerViewSet(viewsets.ModelViewSet):
     lookup_field       = 'uuid'
     lookup_value_regex = r'[0-9a-f-]+'
 
-    # ✅ Un client ne peut pas être modifié ou supprimé après création
     http_method_names = ['get', 'post', 'head', 'options']
 
     def get_permissions(self):
@@ -110,7 +109,6 @@ class CustomerViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         from staff.models import Huissier
 
-        # ✅ Récupérer le profil huissier connecté
         try:
             huissier = Huissier.objects.get(user=request.user)
         except Huissier.DoesNotExist:
@@ -121,15 +119,11 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
-        # ✅ zone, subZone et huissier injectés via save()
-        # Ces champs sont read_only dans le serializer — les passer via request.data serait ignoré
         serializer.save(
             zone     = huissier.zone,
             subZone  = huissier.subZone,
             huissier = huissier,
         )
-
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @extend_schema(
@@ -150,14 +144,12 @@ class CustomerViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='search', permission_classes=[IsHuissierOrAdvisor])
     def search(self, request):
         npi = request.query_params.get('npi', '').strip()
-
         if not npi:
             return Response(
                 {"error": "Paramètre 'npi' requis."},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
-        customers = Customer.objects.filter(npi=npi)
+        customers  = Customer.objects.filter(npi=npi)
         serializer = CustomerSearchSerializer(customers, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -175,12 +167,10 @@ class CustomerViewSet(viewsets.ModelViewSet):
     def request_otp(self, request):
         serializer = ConsultationOTPRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         try:
             serializer.send_otp()
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
         return Response(
             {"msg": "Code OTP envoyé au client par mail."},
             status=status.HTTP_200_OK
@@ -253,10 +243,66 @@ class CustomerViewSet(viewsets.ModelViewSet):
     create=extend_schema(
         tags=["Customers - Dettes"],
         summary="Créer une dette",
-        description="Réservé à l'huissier uniquement. Nécessite un session_token valide.",
+        description=(
+            "Réservé à l'huissier uniquement. Nécessite un session_token valide.\n\n"
+            "**Champs à envoyer :**\n"
+            "- `session_token` : token retourné par verify-otp\n"
+            "- `customer_uuid_field` : UUID du client retourné par verify-otp\n"
+            "- `creditor` : ID du créditeur (optionnel)\n"
+            "- `amount` : montant total (ex: 150000.00)\n"
+            "- `deadline_amount` : montant par échéance (ex: 12500.00)\n"
+            "- `periodicity` : daily | weekly | monthly | quarterly | biannual | annual\n"
+            "- `deadline` : date limite YYYY-MM-DD\n"
+            "- `status` : toujours 'pending' à la création\n\n"
+            "✅ Le lien de validation est envoyé automatiquement au client par email."
+        ),
         request=DebtSerializer,
+        examples=[
+            OpenApiExample(
+                name="Créer une dette",
+                value={
+                    "session_token":       "550e8400-e29b-41d4-a716-446655440000",
+                    "customer_uuid_field": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                    "creditor":            None,
+                    "amount":              "150000.00",
+                    "deadline_amount":     "12500.00",
+                    "periodicity":         "monthly",
+                    "deadline":            "2027-04-25",
+                    "status":              "pending",
+                },
+                request_only=True,
+            )
+        ],
         responses={
-            201: DebtSerializer,
+            201: OpenApiResponse(
+                description="Dette créée — lien de validation envoyé automatiquement au client",
+                response=DebtSerializer,
+                examples=[
+                    OpenApiExample(
+                        name="Exemple de dette créée",
+                        value={
+                            "uuid":              "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "id":                1,
+                            "customer":          1,
+                            "customer_uuid":     "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "customer_name":     "Dora Barbouche",
+                            "creditor_name":     None,
+                            "amount":            "150000.00",
+                            "deadline_amount":   "12500.00",
+                            "periodicity":       "monthly",
+                            "deadline":          "2027-04-25",
+                            "verified":          False,
+                            "status":            "pending",
+                            "validation_status": "pending",
+                            "is_monitored":      False,
+                            "created_at":        "2026-04-25",
+                            "updated_at":        "2026-04-25",
+                            "repayments":        []
+                        },
+                        response_only=True,
+                    )
+                ]
+            ),
             400: OpenApiResponse(description="Session invalide ou expirée"),
             403: OpenApiResponse(description="Permission refusée"),
         },
@@ -294,16 +340,12 @@ class DebtViewSet(viewsets.ModelViewSet):
 
         if not user.is_authenticated:
             return Debt.objects.none()
-
         if not customer_uuid:
             return Debt.objects.none()
-
         if user.is_superuser:
             return Debt.objects.filter(customer__uuid=customer_uuid)
-
         if user.role in ['huissier', 'conseiller']:
             return Debt.objects.filter(customer__uuid=customer_uuid)
-
         return Debt.objects.none()
 
     def list(self, request, *args, **kwargs):
@@ -316,7 +358,7 @@ class DebtViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         session_token = request.data.get('session_token')
-        customer_uuid = request.data.get('customer_uuid')
+        customer_uuid = request.data.get('customer_uuid_field')
 
         if not session_token:
             return Response(
@@ -324,11 +366,44 @@ class DebtViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        if not customer_uuid:
+            return Response(
+                {"error": "customer_uuid_field requis pour ajouter une dette."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         session, error = get_valid_session(session_token, customer_uuid)
         if error:
             return Response({"error": error}, status=status.HTTP_400_BAD_REQUEST)
 
-        return super().create(request, *args, **kwargs)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        # ✅ customer déduit depuis la session
+        debt = serializer.save(customer=session.customer)
+
+        # ✅ CORRECTION : envoi automatique du lien de validation à la création
+        token        = debt.generate_validation_token()
+        base_url     = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+        validate_url = f"{base_url}/debts/validate/?token={token}"
+        reject_url   = f"{base_url}/debts/reject/?token={token}"
+
+        send_email({
+            "subject": "[SCORE] Confirmation d'enregistrement de dette",
+            "message": (
+                f"Bonjour {debt.customer.full_name},\n\n"
+                f"Une dette a été enregistrée à votre nom :\n"
+                f"- Montant       : {debt.amount}\n"
+                f"- Échéance      : {debt.deadline}\n"
+                f"- Périodicité   : {debt.periodicity}\n\n"
+                f"Pour VALIDER cette dette, cliquez ici :\n{validate_url}\n\n"
+                f"Pour REFUSER cette dette, cliquez ici :\n{reject_url}\n\n"
+                f"Ce lien est valable 7 jours.\n\n"
+                f"Cordialement,\nL'équipe SCORE"
+            ),
+            "to": debt.customer.email,
+        })
+
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def update(self, request, *args, **kwargs):
         debt = self.get_object()
@@ -378,8 +453,8 @@ class DebtViewSet(viewsets.ModelViewSet):
 
     @extend_schema(
         tags=["Customers - Dettes"],
-        summary="Envoyer le lien de validation d'une dette",
-        description="Envoie un lien unique au client pour valider ou refuser la dette.",
+        summary="Renvoyer le lien de validation d'une dette",
+        description="Renvoie le lien de validation au client si besoin. Le lien est déjà envoyé automatiquement à la création.",
         request=None,
         responses=None,
     )
@@ -393,8 +468,7 @@ class DebtViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        token = debt.generate_validation_token()
-
+        token        = debt.generate_validation_token()
         base_url     = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
         validate_url = f"{base_url}/debts/validate/?token={token}"
         reject_url   = f"{base_url}/debts/reject/?token={token}"
@@ -416,7 +490,7 @@ class DebtViewSet(viewsets.ModelViewSet):
         })
 
         return Response(
-            {"message": "Lien de validation envoyé au client par email."},
+            {"message": "Lien de validation renvoyé au client par email."},
             status=status.HTTP_200_OK
         )
 
@@ -449,11 +523,47 @@ class DebtViewSet(viewsets.ModelViewSet):
     create=extend_schema(
         tags=["Customers - Remboursements"],
         summary="Créer un remboursement",
-        description="Réservé à l'huissier uniquement. Nécessite un session_token valide.",
+        description=(
+            "Réservé à l'huissier uniquement. Nécessite un session_token valide.\n\n"
+            "**Champs à envoyer :**\n"
+            "- `session_token` : token retourné par verify-otp\n"
+            "- `debt_uuid` : UUID de la dette concernée\n"
+            "- `amount` : montant du versement (ex: 5000.00)\n"
+            "- `date` : date du remboursement (YYYY-MM-DD)\n\n"
+            "✅ Le lien de validation est envoyé automatiquement au client par email."
+        ),
         request=RepaymentSerializer,
+        examples=[
+            OpenApiExample(
+                name="Créer un remboursement",
+                value={
+                    "session_token": "550e8400-e29b-41d4-a716-446655440000",
+                    "debt_uuid":     "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                    "amount":        "5000.00",
+                    "date":          "2026-04-25",
+                },
+                request_only=True,
+            )
+        ],
         responses={
-            201: RepaymentSerializer,
-            400: OpenApiResponse(description="Session invalide ou expirée"),
+            201: OpenApiResponse(
+                description="Remboursement créé — lien de validation envoyé automatiquement au client",
+                response=RepaymentSerializer,
+                examples=[
+                    OpenApiExample(
+                        name="Exemple de remboursement créé",
+                        value={
+                            "uuid":              "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "debt":              1,
+                            "amount":            "5000.00",
+                            "date":              "2026-04-25",
+                            "validation_status": "pending",
+                        },
+                        response_only=True,
+                    )
+                ]
+            ),
+            400: OpenApiResponse(description="Session invalide ou dette introuvable"),
             403: OpenApiResponse(description="Permission refusée"),
         },
     ),
@@ -490,16 +600,12 @@ class RepaymentViewSet(viewsets.ModelViewSet):
 
         if not user.is_authenticated:
             return Repayment.objects.none()
-
         if not customer_uuid:
             return Repayment.objects.none()
-
         if user.is_superuser:
             return Repayment.objects.filter(debt__customer__uuid=customer_uuid)
-
         if user.role in ['huissier', 'conseiller']:
             return Repayment.objects.filter(debt__customer__uuid=customer_uuid)
-
         return Repayment.objects.none()
 
     def list(self, request, *args, **kwargs):
@@ -520,10 +626,16 @@ class RepaymentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        if not debt_uuid:
+            return Response(
+                {"error": "debt_uuid requis pour ajouter un remboursement."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         try:
             debt          = Debt.objects.get(uuid=debt_uuid)
-            customer_uuid = debt.customer.uuid
-        except Exception:
+            customer_uuid = str(debt.customer.uuid)
+        except Debt.DoesNotExist:
             return Response(
                 {"error": "Dette introuvable."},
                 status=status.HTTP_400_BAD_REQUEST
@@ -533,11 +645,34 @@ class RepaymentViewSet(viewsets.ModelViewSet):
         if error:
             return Response({"error": error}, status=status.HTTP_400_BAD_REQUEST)
 
-        data = request.data.copy()
-        data['debt'] = debt.id
-        serializer = self.get_serializer(data=data)
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        # ✅ debt injecté via save()
+        repayment = serializer.save(debt=debt)
+
+        # ✅ CORRECTION : envoi automatique du lien de validation à la création
+        token        = repayment.generate_validation_token()
+        base_url     = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+        validate_url = f"{base_url}/repayments/validate/?token={token}"
+        reject_url   = f"{base_url}/repayments/reject/?token={token}"
+
+        customer = repayment.debt.customer
+        send_email({
+            "subject": "[SCORE] Confirmation de remboursement",
+            "message": (
+                f"Bonjour {customer.full_name},\n\n"
+                f"Un remboursement a été enregistré pour votre dette :\n"
+                f"- Montant versé  : {repayment.amount}\n"
+                f"- Date           : {repayment.date}\n"
+                f"- Montant dette  : {repayment.debt.amount}\n\n"
+                f"Pour VALIDER ce remboursement, cliquez ici :\n{validate_url}\n\n"
+                f"Pour REFUSER ce remboursement, cliquez ici :\n{reject_url}\n\n"
+                f"Ce lien est valable 7 jours.\n\n"
+                f"Cordialement,\nL'équipe SCORE"
+            ),
+            "to": customer.email,
+        })
+
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def update(self, request, *args, **kwargs):
@@ -560,8 +695,8 @@ class RepaymentViewSet(viewsets.ModelViewSet):
 
     @extend_schema(
         tags=["Customers - Remboursements"],
-        summary="Envoyer le lien de validation d'un remboursement",
-        description="Envoie un lien unique au client pour valider ou refuser le remboursement.",
+        summary="Renvoyer le lien de validation d'un remboursement",
+        description="Renvoie le lien de validation au client si besoin. Le lien est déjà envoyé automatiquement à la création.",
         request=None,
         responses=None,
     )
@@ -575,8 +710,7 @@ class RepaymentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        token = repayment.generate_validation_token()
-
+        token        = repayment.generate_validation_token()
         base_url     = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
         validate_url = f"{base_url}/repayments/validate/?token={token}"
         reject_url   = f"{base_url}/repayments/reject/?token={token}"
@@ -587,8 +721,9 @@ class RepaymentViewSet(viewsets.ModelViewSet):
             "message": (
                 f"Bonjour {customer.full_name},\n\n"
                 f"Un remboursement a été enregistré pour votre dette :\n"
-                f"- Date          : {repayment.date}\n"
-                f"- Montant dette : {repayment.debt.amount}\n\n"
+                f"- Montant versé  : {repayment.amount}\n"
+                f"- Date           : {repayment.date}\n"
+                f"- Montant dette  : {repayment.debt.amount}\n\n"
                 f"Pour VALIDER ce remboursement, cliquez ici :\n{validate_url}\n\n"
                 f"Pour REFUSER ce remboursement, cliquez ici :\n{reject_url}\n\n"
                 f"Ce lien est valable 7 jours.\n\n"
@@ -598,7 +733,7 @@ class RepaymentViewSet(viewsets.ModelViewSet):
         })
 
         return Response(
-            {"message": "Lien de validation envoyé au client par email."},
+            {"message": "Lien de validation renvoyé au client par email."},
             status=status.HTTP_200_OK
         )
 
@@ -685,10 +820,24 @@ class RepaymentValidateView(APIView):
             return Response({"error": "Lien invalide."}, status=status.HTTP_400_BAD_REQUEST)
         if not repayment.is_validation_token_valid():
             return Response({"error": "Ce lien a expiré ou a déjà été utilisé."}, status=status.HTTP_400_BAD_REQUEST)
+
         repayment.validation_status       = 'validated'
         repayment.validation_token        = None
         repayment.validation_token_expiry = None
         repayment.save(update_fields=['validation_status', 'validation_token', 'validation_token_expiry'])
+
+        # ✅ Vérifier si la dette est entièrement remboursée
+        from django.db.models import Sum
+        debt            = repayment.debt
+        total_rembourse = Repayment.objects.filter(
+            debt=debt,
+            validation_status='validated'
+        ).aggregate(total=Sum('amount'))['total'] or 0
+
+        if total_rembourse >= debt.amount:
+            debt.status = 'done'
+            debt.save(update_fields=['status'])
+
         return Response({"message": "Remboursement validé avec succès. Merci."}, status=status.HTTP_200_OK)
 
 

@@ -24,7 +24,6 @@ class BaseStaffSerializer(serializers.ModelSerializer):
         return value
 
     def validate_username(self, value):
-        # ✅ Unicité du username parmi tous les utilisateurs
         if ScoreUser.objects.filter(username=value).exists():
             raise serializers.ValidationError("Ce nom d'utilisateur est déjà utilisé.")
         return value
@@ -32,7 +31,6 @@ class BaseStaffSerializer(serializers.ModelSerializer):
     def validate_npi(self, value):
         if not value:
             return value
-        # ✅ Unicité du NPI parmi tous les profils staff
         npi_exists = (
             FrontOffice.objects.filter(npi=value).exists() or
             Huissier.objects.filter(npi=value).exists() or
@@ -45,7 +43,6 @@ class BaseStaffSerializer(serializers.ModelSerializer):
     def validate_phone(self, value):
         if not value:
             return value
-        # ✅ Unicité du téléphone parmi tous les profils staff
         phone_exists = (
             FrontOffice.objects.filter(phone=value).exists() or
             Huissier.objects.filter(phone=value).exists() or
@@ -88,8 +85,10 @@ class FrontOfficeSerializer(BaseStaffSerializer):
         fields = ['id', 'email', 'username', 'zone', 'name', 'npi', 'phone', 'is_active']
         extra_kwargs = {
             'zone': {
-                'read_only': True,
-                'help_text': "Déduite automatiquement depuis le représentant pays connecté",
+                # ✅ CORRECTION : zone est maintenant obligatoire et writable
+                # Le représentant pays choisit la zone parmi celles qu'il a créées
+                'required':  True,
+                'help_text': "ID de la zone à attribuer au front office",
             },
             'name':      {'help_text': "Nom du front office", 'required': False},
             'npi':       {'help_text': "Numéro de pièce d'identité (unique)", 'required': False},
@@ -112,16 +111,17 @@ class FrontOfficeSerializer(BaseStaffSerializer):
 class HuissierSerializer(BaseStaffSerializer):
     class Meta:
         model  = Huissier
-        # ✅ Champ picture supprimé
         fields = ['id', 'email', 'username', 'zone', 'subZone', 'name', 'npi', 'phone', 'is_active']
         extra_kwargs = {
             'zone': {
+                # ✅ La zone est déduite automatiquement depuis le front office connecté
                 'read_only': True,
                 'help_text': "Déduite automatiquement depuis le front office connecté",
             },
             'subZone': {
-                'help_text': "ID de la sous-zone (doit appartenir à la zone du front office)",
+                # ✅ Le front office choisit la sous-zone parmi celles qu'il a créées
                 'required':  True,
+                'help_text': "ID de la sous-zone (doit appartenir à la zone du front office)",
             },
             'name':      {'help_text': "Nom de l'huissier", 'required': False},
             'npi':       {'help_text': "Numéro de pièce d'identité (unique)", 'required': False},
@@ -144,16 +144,17 @@ class HuissierSerializer(BaseStaffSerializer):
 class FinancialAdvisorSerializer(BaseStaffSerializer):
     class Meta:
         model  = FinancialAdvisor
-        # ✅ Champ picture supprimé
         fields = ['id', 'email', 'username', 'zone', 'subZone', 'name', 'npi', 'phone', 'is_active']
         extra_kwargs = {
             'zone': {
+                # ✅ La zone est déduite automatiquement depuis le front office connecté
                 'read_only': True,
                 'help_text': "Déduite automatiquement depuis le front office connecté",
             },
             'subZone': {
-                'help_text': "ID de la sous-zone (doit appartenir à la zone du front office)",
+                # ✅ Le front office choisit la sous-zone parmi celles qu'il a créées
                 'required':  True,
+                'help_text': "ID de la sous-zone (doit appartenir à la zone du front office)",
             },
             'name':      {'help_text': "Nom du conseiller financier", 'required': False},
             'npi':       {'help_text': "Numéro de pièce d'identité (unique)", 'required': False},

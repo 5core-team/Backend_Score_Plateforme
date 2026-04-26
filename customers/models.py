@@ -13,9 +13,12 @@ class Customer(models.Model):
     uuid         = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     first_name   = models.CharField(max_length=100)
     last_name    = models.CharField(max_length=100)
-    email        = models.EmailField(max_length=50)
+    # ✅ email unique — impossible d'utiliser le même email pour 2 clients ou pour un staff
+    email        = models.EmailField(max_length=50, unique=True)
+    # ✅ npi unique
     npi          = models.CharField(max_length=100, unique=True, verbose_name="National Person ID")
-    phone_number = models.CharField(max_length=20, null=True, blank=True)
+    # ✅ phone_number unique
+    phone_number = models.CharField(max_length=20, null=True, blank=True, unique=True)
     credit_score = models.FloatField(default=0.0)
 
     zone     = models.ForeignKey(Zone,     on_delete=models.SET_NULL, null=True, related_name="customers")
@@ -112,7 +115,7 @@ class Debt(models.Model):
         ('rejected',  'Refusée par le client'),
     ]
 
-    uuid            = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)  # ✅
+    uuid            = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     customer        = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, related_name='debts')
     creditor        = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, related_name="receivables")
     amount          = models.DecimalField(max_digits=10, decimal_places=2)
@@ -182,9 +185,15 @@ class Repayment(models.Model):
         ('rejected',  'Refusé par le client'),
     ]
 
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)  # ✅
-    debt = models.ForeignKey(Debt, on_delete=models.CASCADE, related_name='repayments')
-    date = models.DateField()
+    uuid   = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    debt   = models.ForeignKey(Debt, on_delete=models.CASCADE, related_name='repayments')
+    date   = models.DateField()
+    # ✅ Montant du versement
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text="Montant remboursé lors de ce versement"
+    )
 
     validation_status = models.CharField(
         max_length=10,

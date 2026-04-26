@@ -15,25 +15,21 @@ from geography.models import SubZone
 # ─────────────────────────────────────────────
 
 class IsSuperAdmin(BasePermission):
-    """Seul le super admin."""
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.is_superuser
 
 
 class IsCountryRepresentant(BasePermission):
-    """Seul le représentant pays."""
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role == 'country'
 
 
 class IsFrontOffice(BasePermission):
-    """Seul le front office."""
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role == 'front office'
 
 
 class IsHuissier(BasePermission):
-    """Seul l'huissier."""
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role == 'huissier'
 
@@ -43,28 +39,21 @@ class IsHuissier(BasePermission):
 # ─────────────────────────────────────────────
 
 def validate_subzone_belongs_to_front_office(subzone_id, front_office):
-    """
-    Vérifie que la subzone appartient bien
-    à la zone du front office connecté.
-    """
     if not subzone_id:
         return None, None
-
     try:
         subzone = SubZone.objects.get(id=subzone_id)
     except SubZone.DoesNotExist:
         return None, "Sous-zone introuvable."
-
     if subzone.zone != front_office.zone:
         return None, "Cette sous-zone n'appartient pas à votre zone."
-
     return subzone, None
 
 
 # ─────────────────────────────────────────────
 # FRONT OFFICE
 # Créé par : Représentant Pays
-# La zone est déduite automatiquement depuis le pays du représentant
+# Le représentant choisit la zone parmi celles qu'il a créées
 # ─────────────────────────────────────────────
 
 @extend_schema_view(
@@ -80,7 +69,8 @@ def validate_subzone_belongs_to_front_office(subzone_id, front_office):
     create=extend_schema(
         tags=["Staff - Front Office"],
         summary="Créer un front office",
-        description="Réservé au représentant pays uniquement. La zone est déduite automatiquement — le frontend envoie : email, username, name, npi, phone.",
+        # ✅ CORRECTION : description mise à jour — zone obligatoire
+        description="Réservé au représentant pays. Le frontend envoie : email, username, name, zone, npi, phone.",
     ),
     update=extend_schema(
         tags=["Staff - Front Office"],
@@ -128,33 +118,31 @@ class FrontOfficeViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         from geography.models import Country, Zone
 
-        # ✅ Récupérer le pays du représentant pays connecté
+        # ✅ Vérifier que le représentant pays est bien manager d'un pays
         try:
             country = Country.objects.get(manager=request.user)
         except Country.DoesNotExist:
             raise PermissionDenied("Vous n'êtes manager d'aucun pays.")
 
-        # ✅ Le représentant pays peut préciser la zone via zone_id (optionnel)
-        zone_id = request.data.get('zone_id')
-        if zone_id:
-            try:
-                zone = Zone.objects.get(id=zone_id, country=country)
-            except Zone.DoesNotExist:
-                return Response(
-                    {"error": "Zone introuvable ou n'appartient pas à votre pays."},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-        else:
-            zone = Zone.objects.filter(country=country).first()
-            if not zone:
-                return Response(
-                    {"error": "Aucune zone disponible dans votre pays."},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+        # ✅ CORRECTION : zone obligatoire — le représentant choisit parmi ses zones
+        zone_id = request.data.get('zone')
+        if not zone_id:
+            return Response(
+                {"error": "Le champ 'zone' est requis."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            zone = Zone.objects.get(id=zone_id, country=country)
+        except Zone.DoesNotExist:
+            return Response(
+                {"error": "Zone introuvable ou n'appartient pas à votre pays."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        # ✅ Zone injectée via save() — le frontend n'envoie pas ce champ
+        # ✅ Zone vérifiée et injectée via save()
         serializer.save(zone=zone)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -162,8 +150,8 @@ class FrontOfficeViewSet(viewsets.ModelViewSet):
 # ─────────────────────────────────────────────
 # HUISSIER
 # Créé par : Front Office
-# Zone déduite automatiquement depuis le front office connecté
-# SubZone doit appartenir à la Zone du Front Office
+# Zone déduite auto depuis le front office connecté
+# SubZone choisie par le front office parmi celles qu'il a créées
 # ─────────────────────────────────────────────
 
 @extend_schema_view(
@@ -179,7 +167,8 @@ class FrontOfficeViewSet(viewsets.ModelViewSet):
     create=extend_schema(
         tags=["Staff - Huissier"],
         summary="Créer un huissier",
-        description="Réservé au front office. La zone est déduite automatiquement. La subZone doit appartenir à la zone du front office. Le frontend envoie : email, username, name, subZone, npi, phone, picture.",
+        # ✅ CORRECTION : picture supprimé de la description
+        description="Réservé au front office. La zone est déduite automatiquement. Le frontend envoie : email, username, name, subZone, npi, phone.",
     ),
     update=extend_schema(
         tags=["Staff - Huissier"],
@@ -248,7 +237,7 @@ class HuissierViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        # ✅ Zone injectée via save() — le frontend n'envoie pas ce champ
+        # ✅ Zone déduite automatiquement depuis le front office connecté
         serializer.save(zone=front_office.zone)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -256,8 +245,8 @@ class HuissierViewSet(viewsets.ModelViewSet):
 # ─────────────────────────────────────────────
 # FINANCIAL ADVISOR
 # Créé par : Front Office
-# Zone déduite automatiquement depuis le front office connecté
-# SubZone doit appartenir à la Zone du Front Office
+# Zone déduite auto depuis le front office connecté
+# SubZone choisie par le front office parmi celles qu'il a créées
 # ─────────────────────────────────────────────
 
 @extend_schema_view(
@@ -273,7 +262,8 @@ class HuissierViewSet(viewsets.ModelViewSet):
     create=extend_schema(
         tags=["Staff - Conseiller Financier"],
         summary="Créer un conseiller financier",
-        description="Réservé au front office. La zone est déduite automatiquement. La subZone doit appartenir à la zone du front office. Le frontend envoie : email, username, name, subZone, npi, phone, picture.",
+        # ✅ CORRECTION : picture supprimé de la description
+        description="Réservé au front office. La zone est déduite automatiquement. Le frontend envoie : email, username, name, subZone, npi, phone.",
     ),
     update=extend_schema(
         tags=["Staff - Conseiller Financier"],
@@ -342,6 +332,6 @@ class FinancialAdvisorViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        # ✅ Zone injectée via save() — le frontend n'envoie pas ce champ
+        # ✅ Zone déduite automatiquement depuis le front office connecté
         serializer.save(zone=front_office.zone)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
