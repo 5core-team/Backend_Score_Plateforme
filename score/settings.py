@@ -15,6 +15,7 @@ import environ
 env = environ.Env(
     EMAIL_HOST_PASSWORD=(str, ""),
     FRONTEND_URL=(str, "http://localhost:3000"),
+    DEBUG=(bool, True),
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -27,14 +28,10 @@ environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
 SECRET_KEY = 'django-insecure-p(31*$-(60m=09woo$awze2(w4n8b5mx_a0)dc+7@rs^d*61vt'
 
+# ✅ DEBUG lu depuis .env — True en local, False en production
+DEBUG = env('DEBUG')
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG =False
-
-# ALLOWED_HOSTS = ["192.168.1.15", "0.0.0.0", "127.0.0.1", "localhost", "192.168.100.184"]
-#ALLOWED_HOSTS = ['*']
-#ALLOWED_HOSTS = ["api.africarisque.com", "localhost", "127.0.0.1","africarisque.com"]
-ALLOWED_HOSTS = ["africarisque.com","www.africarisque.com","api.africarisque.com", "www.api.africarisque.com", "localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["africarisque.com", "www.africarisque.com", "api.africarisque.com", "www.api.africarisque.com", "localhost", "127.0.0.1"]
 
 
 # ─────────────────────────────────────────────
@@ -61,6 +58,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'drf_spectacular',
     'django_celery_beat',
+    'whitenoise',
 ]
 
 
@@ -77,6 +75,8 @@ AUTH_USER_MODEL = 'accounts.ScoreUser'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # ✅ WhiteNoise — sert les fichiers statiques même en DEBUG=False
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -123,12 +123,6 @@ CORS_ALLOW_ALL_ORIGINS = True
 # BASE DE DONNÉES
 # ─────────────────────────────────────────────
 
-STATIC_URL = '/static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-
-# Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
@@ -158,18 +152,23 @@ AUTH_PASSWORD_VALIDATORS = [
 # ─────────────────────────────────────────────
 
 LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
-USE_I18N = True
-USE_TZ = True
+TIME_ZONE     = 'UTC'
+USE_I18N      = True
+USE_TZ        = True
 
 
 # ─────────────────────────────────────────────
 # FICHIERS STATIQUES & MÉDIAS
+# ✅ STATIC_URL défini une seule fois
 # ─────────────────────────────────────────────
 
-STATIC_URL = 'static/'
+STATIC_URL  = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-MEDIA_URL = '/media/'
+# ✅ WhiteNoise — compression et cache des fichiers statiques
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+MEDIA_URL  = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -218,9 +217,9 @@ SPECTACULAR_SETTINGS = {
 # ─────────────────────────────────────────────
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=12),
+    'ACCESS_TOKEN_LIFETIME':  timedelta(hours=12),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_HEADER_TYPES':      ('Bearer',),
 }
 
 
@@ -238,7 +237,7 @@ CACHES = {
     }
 }
 
-DATA_TIMEOUT = 900
+DATA_TIMEOUT          = 900
 LOAN_REGISTER_TIMEOUT = 700
 
 
@@ -246,11 +245,11 @@ LOAN_REGISTER_TIMEOUT = 700
 # EMAIL
 # ─────────────────────────────────────────────
 
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = env("EMAIL_HOST_USER")
+EMAIL_BACKEND       = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST          = "smtp.gmail.com"
+EMAIL_PORT          = 587
+EMAIL_USE_TLS       = True
+EMAIL_HOST_USER     = env("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")
 
 
@@ -273,13 +272,13 @@ FRONTEND_URL = env('FRONTEND_URL')
 # CELERY
 # ─────────────────────────────────────────────
 
-CELERY_BROKER_URL                = 'redis://127.0.0.1:6379/0'
-CELERY_RESULT_BACKEND            = 'redis://127.0.0.1:6379/0'
-CELERY_ACCEPT_CONTENT            = ['json']
-CELERY_TASK_SERIALIZER           = 'json'
-CELERY_RESULT_SERIALIZER         = 'json'
-CELERY_TIMEZONE                  = 'UTC'
-CELERY_BEAT_SCHEDULER            = 'django_celery_beat.schedulers:DatabaseScheduler'
+CELERY_BROKER_URL        = 'redis://127.0.0.1:6379/0'
+CELERY_RESULT_BACKEND    = 'redis://127.0.0.1:6379/0'
+CELERY_ACCEPT_CONTENT    = ['json']
+CELERY_TASK_SERIALIZER   = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE          = 'UTC'
+CELERY_BEAT_SCHEDULER    = 'django_celery_beat.schedulers:DatabaseScheduler'
 
 from celery.schedules import crontab
 
@@ -288,7 +287,7 @@ CELERY_BEAT_SCHEDULE = {
         'task':     'geography.tasks.check_subscriptions',
         'schedule': crontab(hour=0, minute=0),
     },
-    'check-debt-deadlines-daily': {         # ✅ ajouté
+    'check-debt-deadlines-daily': {
         'task':     'customers.tasks.check_debt_deadlines',
         'schedule': crontab(hour=0, minute=0),
     },

@@ -5,6 +5,9 @@ from django.conf import settings
 from datetime import timedelta
 import secrets
 
+from drf_spectacular.utils import extend_schema_field
+from drf_spectacular.types import OpenApiTypes
+
 from .models import Country, Zone, SubZone, Subscription
 from accounts.models import ScoreUser, AccountCredentials
 from accounts.utils import send_account_setup_email
@@ -39,12 +42,12 @@ class CountrySerializer(serializers.ModelSerializer):
     email    = serializers.EmailField(write_only=True, help_text="Email du manager du pays")
     username = serializers.CharField(max_length=100, write_only=True, help_text="Nom d'utilisateur du manager")
 
-    # ✅ CORRECTION : SerializerMethodField au lieu de BooleanField
-    # has_valid_subscription est une @property dans le modèle — pas un champ DB
+    # ✅ CORRECTION : @extend_schema_field ajouté pour résoudre le warning Swagger
     has_valid_subscription = serializers.SerializerMethodField(
         help_text="Abonnement valide ou non"
     )
 
+    @extend_schema_field(OpenApiTypes.BOOL)
     def get_has_valid_subscription(self, obj):
         return obj.has_valid_subscription
 
