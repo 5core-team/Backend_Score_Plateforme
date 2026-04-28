@@ -6,26 +6,31 @@ from django.utils.http import urlsafe_base64_decode
 from django.utils.encoding import force_str
 from django.utils import timezone
 from django.conf import settings
+from django.contrib.auth.hashers import make_password
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
-from rest_framework import status, generics
+from rest_framework import status, generics, parsers
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiResponse
 from drf_spectacular.types import OpenApiTypes
 
-from .models import ScoreUser, AccountCredentials, PasswordResetCodeModel
+from .models import ScoreUser, AccountCredentials, PasswordResetCodeModel, PasswordChangeRequest
 from .serializers import (
     LoginSerializer,
     LoginResponseSerializer,
     UserProfileSerializer,
+    UpdateUsernameSerializer,
+    UpdatePhotoSerializer,
+    ChangePasswordRequestSerializer,
     ErrorSerializer,
 )
 from accounts.utils import send_email
 
+import secrets
 import random
 import uuid
 from datetime import timedelta
@@ -109,7 +114,6 @@ class VerifyPasswordSetupCredentials(APIView):
         except AccountCredentials.DoesNotExist:
             return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # ✅ Utilisation de la property is_expired du modèle
         if account_cred.is_expired:
             return Response({"error": "Token expired"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -161,7 +165,6 @@ class PasswordSetup(APIView):
         except AccountCredentials.DoesNotExist:
             return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # ✅ Utilisation de la property is_expired du modèle
         if credentials.is_expired:
             return Response({"error": "Token expired"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -284,7 +287,6 @@ class VerifyValidationCode(APIView):
         if not reset_code:
             return Response({"error": "Invalid code"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # ✅ Vérifier l'expiration AVANT de créer le token — et nettoyer le code expiré
         if reset_code.expiry_date < timezone.now():
             reset_code.delete()
             return Response({"error": "Code expired"}, status=status.HTTP_400_BAD_REQUEST)
@@ -346,7 +348,6 @@ class ResetPassword(APIView):
         if not credentials:
             return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # ✅ Utilisation de la property is_expired + nettoyage du token expiré
         if credentials.is_expired:
             credentials.delete()
             return Response({"error": "Token expired"}, status=status.HTTP_400_BAD_REQUEST)
@@ -360,82 +361,223 @@ class ResetPassword(APIView):
 
 
 # ─────────────────────────────────────────────
-# CHANGE PASSWORD
+# PROFILE VIEW — GET uniquement
 # ─────────────────────────────────────────────
 
-@method_decorator(csrf_exempt, name='dispatch')
-class ChangePassword(APIView):
+@extend_schema(
+    tags=["Profil"],
+    summary="Récupérer le profil utilisateur",
+    description="Retourne les informations du profil de l'utilisateur connecté.",
+    responses={200: UserProfileSerializer},
+)
+class ProfileView(generics.RetrieveAPIView):
+    serializer_class   = UserProfileSerializer
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(
-        tags=["Auth"],
-        summary="Changer le mot de passe",
-        description="Permet à un utilisateur authentifié de changer son mot de passe. Retourne de nouveaux tokens JWT.",
-        request={
-            "application/json": {
-                "type": "object",
-                "properties": {
-                    "old_password": {"type": "string"},
-                    "new_password": {"type": "string"},
-                },
-                "required": ["old_password", "new_password"],
-            }
-        },
-        responses={
-            200: OpenApiResponse(description="Mot de passe modifié avec succès — nouveaux tokens retournés"),
-            400: OpenApiResponse(description="Ancien mot de passe incorrect ou paramètres manquants"),
-        },
-    )
-    def post(self, request: Request):
-        user         = request.user
-        old_password = request.data.get("old_password")
-        new_password = request.data.get("new_password")
+    def get_object(self):
+        return self.request.user
 
-        if not old_password or not new_password:
-            return Response(
-                {"error": "Ancien et nouveau mot de passe requis."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
 
-        if not user.check_password(old_password):
-            return Response(
-                {"error": "Ancien mot de passe incorrect."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+# ─────────────────────────────────────────────
+# UPDATE USERNAME — PATCH username uniquement
+# ─────────────────────────────────────────────
 
-        user.set_password(new_password)
-        user.password_changed = True
-        user.save()
+@extend_schema(
+    tags=["Profil"],
+    summary="Modifier le nom d'utilisateur",
+    description="Permet de modifier uniquement le nom d'utilisateur.",
+    request=UpdateUsernameSerializer,
+    responses={
+        200: UpdateUsernameSerializer,
+        400: OpenApiResponse(description="Nom d'utilisateur invalide ou déjà utilisé"),
+    },
+)
+class UpdateUsernameView(APIView):
+    permission_classes = [IsAuthenticated]
 
-        # ✅ Nouveaux tokens JWT retournés — l'ancien token est invalidé
-        refresh = RefreshToken.for_user(user)
+    def patch(self, request):
+        serializer = UpdateUsernameSerializer(
+            request.user,
+            data=request.data,
+            partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
         return Response(
             {
-                "message":       "Mot de passe modifié avec succès.",
-                "access_token":  str(refresh.access_token),
-                "refresh_token": str(refresh),
+                "message": "Nom d'utilisateur mis à jour avec succès.",
+                "data":    serializer.data,
             },
             status=status.HTTP_200_OK
         )
 
 
 # ─────────────────────────────────────────────
-# PROFILE VIEW
+# UPDATE PHOTO — PATCH photo uniquement
+# multipart/form-data requis
 # ─────────────────────────────────────────────
 
 @extend_schema(
     tags=["Profil"],
-    summary="Récupérer et mettre à jour le profil utilisateur",
-    description="GET → récupérer le profil | PUT/PATCH → modifier le profil.",
-    request=UserProfileSerializer,
+    summary="Modifier la photo de profil",
+    description="Permet de modifier uniquement la photo de profil. Envoyer en multipart/form-data.",
+    request=UpdatePhotoSerializer,
     responses={
-        200: UserProfileSerializer,
-        400: OpenApiResponse(description="Données invalides"),
+        200: UpdatePhotoSerializer,
+        400: OpenApiResponse(description="Fichier invalide"),
     },
 )
-class ProfileView(generics.RetrieveUpdateAPIView):
-    serializer_class   = UserProfileSerializer
+class UpdatePhotoView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes     = [parsers.MultiPartParser, parsers.FormParser]
+
+    def patch(self, request):
+        serializer = UpdatePhotoSerializer(
+            request.user,
+            data=request.data,
+            partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {
+                "message": "Photo de profil mise à jour avec succès.",
+                "data":    serializer.data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+# ─────────────────────────────────────────────
+# CHANGE PASSWORD REQUEST — via email
+# ─────────────────────────────────────────────
+
+@extend_schema(
+    tags=["Profil"],
+    summary="Demander un changement de mot de passe",
+    description=(
+        "L'utilisateur saisit son nouveau mot de passe et sa confirmation. "
+        "Un email de confirmation est envoyé automatiquement. "
+        "L'ancien mot de passe reste actif jusqu'à confirmation du lien reçu par email."
+    ),
+    request=ChangePasswordRequestSerializer,
+    responses={
+        200: OpenApiResponse(description="Email de confirmation envoyé"),
+        400: OpenApiResponse(description="Mots de passe invalides ou non identiques"),
+    },
+)
+class ChangePasswordRequestView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get_object(self):
-        return self.request.user
+    def post(self, request):
+        serializer = ChangePasswordRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user         = request.user
+        new_password = serializer.validated_data['new_password']
+
+        # ✅ Hasher le nouveau mot de passe avant de le stocker
+        new_password_hash = make_password(new_password)
+
+        # ✅ Supprimer les anciennes demandes non confirmées
+        PasswordChangeRequest.objects.filter(user=user, is_used=False).delete()
+
+        # ✅ Créer la demande avec un token unique
+        token = secrets.token_urlsafe(32)
+        PasswordChangeRequest.objects.create(
+            user              = user,
+            new_password_hash = new_password_hash,
+            token             = token,
+            expiry_date       = timezone.now() + timedelta(minutes=30),
+        )
+
+        # ✅ Envoyer l'email de confirmation
+        base_url    = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+        confirm_url = f"{base_url}/profile/confirm-password/?token={token}"
+
+        send_email({
+            "subject": "[SCORE] Confirmation de changement de mot de passe",
+            "message": (
+                f"Bonjour {user.username},\n\n"
+                f"Vous avez demandé à changer votre mot de passe.\n\n"
+                f"Cliquez sur le lien ci-dessous pour confirmer :\n{confirm_url}\n\n"
+                f"Ce lien est valable 30 minutes.\n\n"
+                f"Si vous n'avez pas fait cette demande, ignorez cet email.\n"
+                f"Votre ancien mot de passe reste actif.\n\n"
+                f"Cordialement,\nL'équipe SCORE"
+            ),
+            "to": user.email,
+        })
+
+        return Response(
+            {"message": "Email de confirmation envoyé. Vérifiez votre boîte mail."},
+            status=status.HTTP_200_OK
+        )
+
+
+# ─────────────────────────────────────────────
+# CONFIRM PASSWORD CHANGE — via lien email
+# ─────────────────────────────────────────────
+
+@extend_schema(
+    tags=["Profil"],
+    summary="Confirmer le changement de mot de passe",
+    description="Le lien reçu par email active le nouveau mot de passe. Aucune authentification requise.",
+    parameters=[
+        OpenApiParameter(
+            name='token',
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.QUERY,
+            required=True,
+            description="Token reçu par email"
+        ),
+    ],
+    responses={
+        200: OpenApiResponse(description="Mot de passe changé avec succès"),
+        400: OpenApiResponse(description="Token invalide ou expiré"),
+    },
+)
+class ConfirmPasswordChangeView(APIView):
+    permission_classes = []
+
+    def get(self, request):
+        token = request.query_params.get('token')
+
+        if not token:
+            return Response(
+                {"error": "Token manquant."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            change_request = PasswordChangeRequest.objects.get(
+                token=token,
+                is_used=False
+            )
+        except PasswordChangeRequest.DoesNotExist:
+            return Response(
+                {"error": "Lien invalide."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if change_request.is_expired:
+            change_request.delete()
+            return Response(
+                {"error": "Ce lien a expiré. Veuillez refaire la demande."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # ✅ Appliquer le nouveau mot de passe hashé
+        user          = change_request.user
+        user.password = change_request.new_password_hash
+        user.password_changed = True
+        user.save(update_fields=['password', 'password_changed'])
+
+        # ✅ Marquer la demande comme utilisée
+        change_request.is_used = True
+        change_request.save(update_fields=['is_used'])
+
+        return Response(
+            {"message": "Mot de passe changé avec succès. Vous pouvez vous reconnecter."},
+            status=status.HTTP_200_OK
+        )
