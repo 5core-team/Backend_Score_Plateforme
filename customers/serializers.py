@@ -51,7 +51,6 @@ class CustomerSerializer(serializers.ModelSerializer):
 
     def get_fields(self):
         fields = super().get_fields()
-        # ✅ Champs identitaires non modifiables après création
         if self.instance is not None:
             fields['first_name'].read_only   = True
             fields['last_name'].read_only    = True
@@ -61,13 +60,11 @@ class CustomerSerializer(serializers.ModelSerializer):
         return fields
 
     def validate_email(self, value):
-        # ✅ Vérifier que l'email n'est pas déjà utilisé par un utilisateur du système
         from accounts.models import ScoreUser
         if ScoreUser.objects.filter(email=value).exists():
             raise serializers.ValidationError(
                 "Cet email est déjà utilisé par un utilisateur du système."
             )
-        # ✅ Vérifier que l'email n'est pas déjà utilisé par un autre client
         qs = Customer.objects.filter(email=value)
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
@@ -78,7 +75,6 @@ class CustomerSerializer(serializers.ModelSerializer):
         return value
 
     def validate_npi(self, value):
-        # ✅ Vérifier que le NPI n'est pas déjà utilisé par un autre client
         qs = Customer.objects.filter(npi=value)
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
@@ -91,7 +87,6 @@ class CustomerSerializer(serializers.ModelSerializer):
     def validate_phone_number(self, value):
         if not value:
             return value
-        # ✅ Vérifier que le téléphone n'est pas déjà utilisé par un autre client
         qs = Customer.objects.filter(phone_number=value)
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
@@ -297,6 +292,12 @@ class DebtSerializer(serializers.ModelSerializer):
         read_only=True,
         default=None
     )
+    # ✅ UUID du créditeur retourné en réponse
+    creditor_uuid = serializers.UUIDField(
+        source='creditor.uuid',
+        read_only=True,
+        default=None
+    )
 
     # ✅ Champs write_only visibles dans Swagger — gérés par la vue, supprimés avant save()
     session_token = serializers.CharField(
@@ -309,23 +310,33 @@ class DebtSerializer(serializers.ModelSerializer):
         required=True,
         help_text="UUID du client — récupéré depuis la réponse de verify-otp"
     )
+    # ✅ CORRECTION : UUID du créditeur au lieu de son ID numérique
+    creditor_uuid_field = serializers.UUIDField(
+        write_only=True,
+        required=False,
+        allow_null=True,
+        help_text="UUID du client créditeur (optionnel) — retourné à la création du client"
+    )
 
     class Meta:
         model  = Debt
         fields = [
             'uuid',
             'id',
+            # ✅ Champs à envoyer par le frontend
             'session_token',
             'customer_uuid_field',
-            'creditor',
+            'creditor_uuid_field',
             'amount',
             'deadline_amount',
             'periodicity',
             'deadline',
             'status',
+            # ✅ Champs retournés en réponse uniquement
             'customer',
             'customer_uuid',
             'customer_name',
+            'creditor_uuid',
             'creditor_name',
             'verified',
             'validation_status',
@@ -339,12 +350,6 @@ class DebtSerializer(serializers.ModelSerializer):
             'customer': {
                 'read_only': True,
                 'help_text': "Déduit automatiquement depuis la session — ne pas envoyer",
-            },
-            'creditor': {
-                'write_only': True,
-                'help_text':  "ID du client créditeur (optionnel)",
-                'required':   False,
-                'allow_null': True,
             },
             'amount':            {'help_text': "Montant total de la dette (ex: 150000.00)"},
             'deadline_amount':   {'help_text': "Montant dû à chaque échéance (ex: 12500.00)"},
@@ -361,4 +366,5 @@ class DebtSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         attrs.pop('session_token', None)
         attrs.pop('customer_uuid_field', None)
+        attrs.pop('creditor_uuid_field', None)
         return attrs
