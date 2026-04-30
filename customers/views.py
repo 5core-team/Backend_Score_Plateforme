@@ -902,12 +902,25 @@ class RepaymentViewSet(viewsets.ModelViewSet):
 # VALIDATION DETTE PAR LIEN UNIQUE
 # ─────────────────────────────────────────────
 
+# ✅ CORRECTION : paramètre token ajouté dans Swagger
 @extend_schema(
     tags=["Customers - Dettes"],
     summary="Valider une dette via lien unique",
     description="Le débiteur valide la dette via le lien reçu par email. Aucune authentification requise.",
+    parameters=[
+        OpenApiParameter(
+            name='token',
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.QUERY,
+            required=True,
+            description="Token reçu par email dans le lien de validation"
+        ),
+    ],
     request=None,
-    responses=None,
+    responses={
+        200: OpenApiResponse(description="Dette validée avec succès"),
+        400: OpenApiResponse(description="Token manquant, invalide ou expiré"),
+    },
 )
 class DebtValidateView(APIView):
     permission_classes = []
@@ -929,12 +942,25 @@ class DebtValidateView(APIView):
         return Response({"message": "Dette validée avec succès. Merci."}, status=status.HTTP_200_OK)
 
 
+# ✅ CORRECTION : paramètre token ajouté dans Swagger
 @extend_schema(
     tags=["Customers - Dettes"],
     summary="Refuser une dette via lien unique",
     description="Le débiteur refuse la dette via le lien reçu par email. Aucune authentification requise.",
+    parameters=[
+        OpenApiParameter(
+            name='token',
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.QUERY,
+            required=True,
+            description="Token reçu par email dans le lien de refus"
+        ),
+    ],
     request=None,
-    responses=None,
+    responses={
+        200: OpenApiResponse(description="Dette refusée — huissier notifié"),
+        400: OpenApiResponse(description="Token manquant, invalide ou expiré"),
+    },
 )
 class DebtRejectView(APIView):
     permission_classes = []
@@ -983,12 +1009,25 @@ class DebtRejectView(APIView):
 # VALIDATION REMBOURSEMENT PAR LIEN UNIQUE
 # ─────────────────────────────────────────────
 
+# ✅ CORRECTION : paramètre token ajouté dans Swagger
 @extend_schema(
     tags=["Customers - Remboursements"],
     summary="Valider un remboursement via lien unique",
     description="Le créditeur confirme avoir reçu le remboursement via le lien reçu par email. Aucune authentification requise.",
+    parameters=[
+        OpenApiParameter(
+            name='token',
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.QUERY,
+            required=True,
+            description="Token reçu par email dans le lien de confirmation"
+        ),
+    ],
     request=None,
-    responses=None,
+    responses={
+        200: OpenApiResponse(description="Remboursement confirmé avec succès"),
+        400: OpenApiResponse(description="Token manquant, invalide ou expiré"),
+    },
 )
 class RepaymentValidateView(APIView):
     permission_classes = []
@@ -1024,12 +1063,25 @@ class RepaymentValidateView(APIView):
         return Response({"message": "Remboursement confirmé avec succès. Merci."}, status=status.HTTP_200_OK)
 
 
+# ✅ CORRECTION : paramètre token ajouté dans Swagger
 @extend_schema(
     tags=["Customers - Remboursements"],
     summary="Refuser un remboursement via lien unique",
     description="Le créditeur refuse le remboursement via le lien reçu par email. Aucune authentification requise.",
+    parameters=[
+        OpenApiParameter(
+            name='token',
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.QUERY,
+            required=True,
+            description="Token reçu par email dans le lien de refus"
+        ),
+    ],
     request=None,
-    responses=None,
+    responses={
+        200: OpenApiResponse(description="Remboursement refusé — huissier notifié"),
+        400: OpenApiResponse(description="Token manquant, invalide ou expiré"),
+    },
 )
 class RepaymentRejectView(APIView):
     permission_classes = []
