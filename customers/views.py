@@ -342,8 +342,27 @@ class DebtViewSet(viewsets.ModelViewSet):
 
         if not user.is_authenticated:
             return Debt.objects.none()
+
+        # ✅ CORRECTION : actions de détail — pas besoin de customer_uuid
+        if self.action in [
+            'retrieve',
+            'update',
+            'partial_update',
+            'toggle_monitoring',
+            'monitoring_status',
+            'send_validation',
+            'repayments_history',
+        ]:
+            if user.is_superuser:
+                return Debt.objects.all()
+            if user.role in ['huissier', 'conseiller']:
+                return Debt.objects.all()
+            return Debt.objects.none()
+
+        # ✅ Pour list — customer_uuid obligatoire
         if not customer_uuid:
             return Debt.objects.none()
+
         if user.is_superuser:
             return Debt.objects.filter(customer__uuid=customer_uuid)
         if user.role in ['huissier', 'conseiller']:
@@ -381,7 +400,6 @@ class DebtViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        # ✅ Créditeur obligatoire — récupéré via son UUID
         creditor_uuid = request.data.get('creditor_uuid_field')
         if not creditor_uuid:
             return Response(
@@ -401,7 +419,6 @@ class DebtViewSet(viewsets.ModelViewSet):
             creditor = creditor,
         )
 
-        # ✅ Envoi automatique du lien de validation au débiteur à la création
         token        = debt.generate_validation_token()
         base_url     = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
         validate_url = f"{base_url}/debts/validate/?token={token}"
@@ -555,7 +572,6 @@ class DebtViewSet(viewsets.ModelViewSet):
             400: OpenApiResponse(description="Aucun profil huissier associé"),
         },
     )
-    # ✅ NOUVEAU — endpoint monitoring-status
     @action(detail=True, methods=['get'], url_path='monitoring-status', permission_classes=[IsHuissier])
     def monitoring_status(self, request, uuid=None):
         from staff.models import Huissier
@@ -730,8 +746,24 @@ class RepaymentViewSet(viewsets.ModelViewSet):
 
         if not user.is_authenticated:
             return Repayment.objects.none()
+
+        # ✅ CORRECTION : actions de détail — pas besoin de customer_uuid
+        if self.action in [
+            'retrieve',
+            'update',
+            'partial_update',
+            'send_validation',
+        ]:
+            if user.is_superuser:
+                return Repayment.objects.all()
+            if user.role in ['huissier', 'conseiller']:
+                return Repayment.objects.all()
+            return Repayment.objects.none()
+
+        # ✅ Pour list — customer_uuid obligatoire
         if not customer_uuid:
             return Repayment.objects.none()
+
         if user.is_superuser:
             return Repayment.objects.filter(debt__customer__uuid=customer_uuid)
         if user.role in ['huissier', 'conseiller']:
@@ -779,7 +811,6 @@ class RepaymentViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         repayment = serializer.save(debt=debt)
 
-        # ✅ Le créditeur reçoit le mail de confirmation
         token        = repayment.generate_validation_token()
         base_url     = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
         validate_url = f"{base_url}/repayments/validate/?token={token}"
@@ -955,7 +986,6 @@ class RepaymentValidateView(APIView):
         repayment.validation_token_expiry = None
         repayment.save(update_fields=['validation_status', 'validation_token', 'validation_token_expiry'])
 
-        # ✅ Vérifier si la dette est entièrement remboursée
         from django.db.models import Sum
         debt            = repayment.debt
         total_rembourse = Repayment.objects.filter(
