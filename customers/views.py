@@ -343,7 +343,7 @@ class DebtViewSet(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return Debt.objects.none()
 
-        # ✅ CORRECTION : actions de détail — pas besoin de customer_uuid
+        # ✅ Actions de détail — pas besoin de customer_uuid
         if self.action in [
             'retrieve',
             'update',
@@ -747,7 +747,7 @@ class RepaymentViewSet(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return Repayment.objects.none()
 
-        # ✅ CORRECTION : actions de détail — pas besoin de customer_uuid
+        # ✅ Actions de détail — pas besoin de customer_uuid
         if self.action in [
             'retrieve',
             'update',
@@ -949,11 +949,34 @@ class DebtRejectView(APIView):
             return Response({"error": "Lien invalide."}, status=status.HTTP_400_BAD_REQUEST)
         if not debt.is_validation_token_valid():
             return Response({"error": "Ce lien a expiré ou a déjà été utilisé."}, status=status.HTTP_400_BAD_REQUEST)
+
         debt.validation_status       = 'rejected'
         debt.validation_token        = None
         debt.validation_token_expiry = None
         debt.save(update_fields=['validation_status', 'validation_token', 'validation_token_expiry'])
-        return Response({"message": "Dette refusée. L'huissier sera notifié pour correction."}, status=status.HTTP_200_OK)
+
+        # ✅ Notification automatique à l'huissier du client
+        huissier = debt.customer.huissier
+        if huissier and huissier.user:
+            send_email({
+                "subject": "[SCORE] Dette refusée par le débiteur",
+                "message": (
+                    f"Bonjour {huissier.user.username},\n\n"
+                    f"Le client {debt.customer.full_name} a refusé la dette enregistrée à son nom :\n\n"
+                    f"- Montant       : {debt.amount}\n"
+                    f"- Échéance      : {debt.deadline}\n"
+                    f"- Périodicité   : {debt.periodicity}\n\n"
+                    f"Veuillez contacter le client pour corriger les informations "
+                    f"et renvoyer le lien de validation.\n\n"
+                    f"Cordialement,\nL'équipe SCORE"
+                ),
+                "to": huissier.user.email,
+            })
+
+        return Response(
+            {"message": "Dette refusée. L'huissier a été notifié pour correction."},
+            status=status.HTTP_200_OK
+        )
 
 
 # ─────────────────────────────────────────────
@@ -986,6 +1009,7 @@ class RepaymentValidateView(APIView):
         repayment.validation_token_expiry = None
         repayment.save(update_fields=['validation_status', 'validation_token', 'validation_token_expiry'])
 
+        # ✅ Vérifier si la dette est entièrement remboursée
         from django.db.models import Sum
         debt            = repayment.debt
         total_rembourse = Repayment.objects.filter(
@@ -1020,8 +1044,32 @@ class RepaymentRejectView(APIView):
             return Response({"error": "Lien invalide."}, status=status.HTTP_400_BAD_REQUEST)
         if not repayment.is_validation_token_valid():
             return Response({"error": "Ce lien a expiré ou a déjà été utilisé."}, status=status.HTTP_400_BAD_REQUEST)
+
         repayment.validation_status       = 'rejected'
         repayment.validation_token        = None
         repayment.validation_token_expiry = None
         repayment.save(update_fields=['validation_status', 'validation_token', 'validation_token_expiry'])
-        return Response({"message": "Remboursement refusé. L'huissier sera notifié pour correction."}, status=status.HTTP_200_OK)
+
+        # ✅ Notification automatique à l'huissier du client
+        huissier = repayment.debt.customer.huissier
+        if huissier and huissier.user:
+            send_email({
+                "subject": "[SCORE] Remboursement refusé par le créditeur",
+                "message": (
+                    f"Bonjour {huissier.user.username},\n\n"
+                    f"Le créditeur {repayment.debt.creditor.full_name} a refusé "
+                    f"le remboursement suivant :\n\n"
+                    f"- Montant versé  : {repayment.amount}\n"
+                    f"- Date           : {repayment.date}\n"
+                    f"- Montant dette  : {repayment.debt.amount}\n\n"
+                    f"Veuillez vérifier les informations et renvoyer le lien "
+                    f"de validation au créditeur.\n\n"
+                    f"Cordialement,\nL'équipe SCORE"
+                ),
+                "to": huissier.user.email,
+            })
+
+        return Response(
+            {"message": "Remboursement refusé. L'huissier a été notifié pour correction."},
+            status=status.HTTP_200_OK
+        )
