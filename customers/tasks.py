@@ -27,28 +27,29 @@ def check_debt_deadlines():
     today = now().date()
 
     # ── Dettes concernées ─────────────────────────────────────────────
-    # Toutes les dettes validées et non remboursées
     debts = Debt.objects.filter(
         status='pending',
         validation_status='validated',
-    ).select_related('customer', 'customer__huissier__user')
+    ).prefetch_related('monitored_by__user', 'customer__huissier__user')
 
     for debt in debts:
-        customer      = debt.customer
-        huissier_user = customer.huissier.user if customer.huissier else None
-        days_left     = (debt.deadline - today).days
+        customer  = debt.customer
+        days_left = (debt.deadline - today).days
+
+        # ✅ Liste de tous les huissiers qui suivent cette dette
+        huissiers_suiveurs = debt.monitored_by.all()
 
         # ── ALERTES PRÉVENTIVES ───────────────────────────────────────
         if days_left in [7, 3, 1]:
 
-            # Email au client
+            # Email au client débiteur
             send_alert(
                 subject        = f"[SCORE] Rappel — Échéance dans {days_left} jour(s)",
                 message        = (
                     f"Bonjour {customer.full_name},\n\n"
                     f"Nous vous rappelons que vous avez une dette dont l'échéance "
                     f"approche :\n\n"
-                    f"- Montant        : {debt.amount}\n"
+                    f"- Montant         : {debt.amount}\n"
                     f"- Date d'échéance : {debt.deadline}\n"
                     f"- Jours restants  : {days_left} jour(s)\n\n"
                     f"Merci de procéder au remboursement avant la date d'échéance.\n\n"
@@ -57,71 +58,69 @@ def check_debt_deadlines():
                 recipient_list = [customer.email],
             )
 
-            # Email à l'huissier si suivi activé
-            if debt.is_monitored and huissier_user:
-                send_alert(
-                    subject        = f"[SCORE] Suivi — Échéance dans {days_left} jour(s) — {customer.full_name}",
-                    message        = (
-                        f"Bonjour,\n\n"
-                        f"La dette suivante que vous surveillez arrive à échéance "
-                        f"dans {days_left} jour(s) :\n\n"
-                        f"- Client          : {customer.full_name}\n"
-                        f"- Montant         : {debt.amount}\n"
-                        f"- Date d'échéance  : {debt.deadline}\n\n"
-                        f"Cordialement,\nL'équipe SCORE"
-                    ),
-                    recipient_list = [huissier_user.email],
-                )
+            # ✅ Email à CHAQUE huissier qui suit cette dette
+            for huissier in huissiers_suiveurs:
+                if huissier.user:
+                    send_alert(
+                        subject        = f"[SCORE] Suivi — Échéance dans {days_left} jour(s) — {customer.full_name}",
+                        message        = (
+                            f"Bonjour {huissier.user.username},\n\n"
+                            f"La dette suivante que vous surveillez arrive à échéance "
+                            f"dans {days_left} jour(s) :\n\n"
+                            f"- Client          : {customer.full_name}\n"
+                            f"- Montant         : {debt.amount}\n"
+                            f"- Date d'échéance : {debt.deadline}\n\n"
+                            f"Cordialement,\nL'équipe SCORE"
+                        ),
+                        recipient_list = [huissier.user.email],
+                    )
 
         # ── ALERTES DE RETARD ─────────────────────────────────────────
         elif today > debt.deadline:
 
-            # Vérifier si on doit envoyer une alerte aujourd'hui
-            # Jour J (première alerte) ou tous les 7 jours après
             should_alert = False
 
             if debt.last_alert_sent is None:
-                # ✅ Première alerte — le jour J
                 should_alert = True
             else:
                 days_since_last_alert = (today - debt.last_alert_sent).days
                 if days_since_last_alert >= 7:
-                    # ✅ Alerte tous les 7 jours
                     should_alert = True
 
             if should_alert:
                 days_overdue = (today - debt.deadline).days
 
-                # Email au client
+                # Email au client débiteur
                 send_alert(
                     subject        = f"[SCORE] RETARD — Votre dette est en retard de {days_overdue} jour(s)",
                     message        = (
                         f"Bonjour {customer.full_name},\n\n"
                         f"Votre dette est en retard de paiement :\n\n"
                         f"- Montant          : {debt.amount}\n"
-                        f"- Date d'échéance   : {debt.deadline}\n"
-                        f"- Jours de retard   : {days_overdue} jour(s)\n\n"
+                        f"- Date d'échéance  : {debt.deadline}\n"
+                        f"- Jours de retard  : {days_overdue} jour(s)\n\n"
                         f"Merci de régulariser votre situation dans les plus brefs délais.\n\n"
                         f"Cordialement,\nL'équipe SCORE"
                     ),
                     recipient_list = [customer.email],
                 )
 
-                # Email à l'huissier si suivi activé
-                if debt.is_monitored and huissier_user:
-                    send_alert(
-                        subject        = f"[SCORE] Suivi — RETARD {days_overdue} jour(s) — {customer.full_name}",
-                        message        = (
-                            f"Bonjour,\n\n"
-                            f"La dette suivante que vous surveillez est en retard :\n\n"
-                            f"- Client           : {customer.full_name}\n"
-                            f"- Montant          : {debt.amount}\n"
-                            f"- Date d'échéance   : {debt.deadline}\n"
-                            f"- Jours de retard   : {days_overdue} jour(s)\n\n"
-                            f"Cordialement,\nL'équipe SCORE"
-                        ),
-                        recipient_list = [huissier_user.email],
-                    )
+                # ✅ Email à CHAQUE huissier qui suit cette dette
+                for huissier in huissiers_suiveurs:
+                    if huissier.user:
+                        send_alert(
+                            subject        = f"[SCORE] Suivi — RETARD {days_overdue} jour(s) — {customer.full_name}",
+                            message        = (
+                                f"Bonjour {huissier.user.username},\n\n"
+                                f"La dette suivante que vous surveillez est en retard :\n\n"
+                                f"- Client          : {customer.full_name}\n"
+                                f"- Montant         : {debt.amount}\n"
+                                f"- Date d'échéance : {debt.deadline}\n"
+                                f"- Jours de retard : {days_overdue} jour(s)\n\n"
+                                f"Cordialement,\nL'équipe SCORE"
+                            ),
+                            recipient_list = [huissier.user.email],
+                        )
 
                 # ✅ Mettre à jour la date de dernière alerte
                 debt.last_alert_sent = today
