@@ -158,7 +158,6 @@ class CountryDashboardView(APIView):
         total_advisors  = FinancialAdvisor.objects.filter(zone__country=country).count()
         active_advisors = FinancialAdvisor.objects.filter(zone__country=country, is_active=True).count()
 
-        # ✅ Clients dont la zone appartient à ce pays
         total_customers   = Customer.objects.filter(zone__country=country).count()
         customers_by_zone = (
             Customer.objects
@@ -269,7 +268,6 @@ class FrontOfficeDashboardView(APIView):
         total_advisors  = FinancialAdvisor.objects.filter(zone=zone).count()
         active_advisors = FinancialAdvisor.objects.filter(zone=zone, is_active=True).count()
 
-        # ✅ Clients dont la zone correspond à la zone du front office
         total_customers      = Customer.objects.filter(zone=zone).count()
         customers_by_subzone = (
             Customer.objects
@@ -366,29 +364,22 @@ class HuissierDashboardView(APIView):
                 status=404
             )
 
-        # ✅ Clients créés par CET huissier
         total_customers = Customer.objects.filter(huissier=huissier).count()
 
-        # ✅ Toutes les dettes des clients de cet huissier
         debts_qs       = Debt.objects.filter(customer__huissier=huissier)
         total_debts    = debts_qs.count()
         verified_debts = debts_qs.filter(validation_status='validated').count()
 
-        # ✅ Taux de réponse = % d'OTPs validés parmi ceux envoyés aux clients de cet huissier
         total_otps_envoyes = ConsultationOTP.objects.filter(customer__huissier=huissier).count()
         total_otps_valides = ConsultationOTP.objects.filter(customer__huissier=huissier, is_used=True).count()
         taux_de_reponse    = round((total_otps_valides / total_otps_envoyes * 100), 1) if total_otps_envoyes > 0 else 0
 
-        # ✅ Total des consultations ouvertes par cet huissier
         total_consultations = ConsultationSession.objects.filter(
             created_by=request.user
         ).count()
 
-        # ✅ Dettes surveillées (is_monitored=True) des clients de cet huissier
-        dettes_surveillees_qs  = Debt.objects.filter(
-            customer__huissier=huissier,
-            is_monitored=True
-        )
+        # ✅ CORRECTION : monitored_by=huissier au lieu de is_monitored=True
+        dettes_surveillees_qs  = Debt.objects.filter(monitored_by=huissier)
         total_dettes_suivies   = dettes_surveillees_qs.count()
         pending_dettes_suivies = dettes_surveillees_qs.filter(status='pending').count()
         done_dettes_suivies    = dettes_surveillees_qs.filter(status='done').count()
@@ -397,13 +388,11 @@ class HuissierDashboardView(APIView):
         ).count()
         total_amount_suivies   = dettes_surveillees_qs.aggregate(total=Sum('amount'))['total'] or 0
 
-        # ✅ Remboursements des dettes surveillées de cet huissier
+        # ✅ CORRECTION : debt__monitored_by=huissier au lieu de debt__is_monitored=True
         total_remboursements_suivis = Repayment.objects.filter(
-            debt__customer__huissier=huissier,
-            debt__is_monitored=True
+            debt__monitored_by=huissier
         ).count()
 
-        # ✅ Dernières demandes OTP des clients de CET huissier
         derniers_otps = (
             ConsultationOTP.objects
             .filter(customer__huissier=huissier)
@@ -486,26 +475,21 @@ class FinancialAdvisorDashboardView(APIView):
                 status=404
             )
 
-        # ✅ Total des consultations ouvertes par CE conseiller
         total_consultations = ConsultationSession.objects.filter(
             created_by=request.user
         ).count()
 
-        # ✅ OTPs envoyés aux clients consultés par CE conseiller
         total_otps_envoyes = ConsultationOTP.objects.filter(
             customer__sessions__created_by=request.user
         ).distinct().count()
 
-        # ✅ OTPs validés parmi ceux envoyés par CE conseiller
         total_otps_valides = ConsultationOTP.objects.filter(
             customer__sessions__created_by=request.user,
             is_used=True
         ).distinct().count()
 
-        # ✅ Taux = % de clients ayant validé l'OTP parmi ceux contactés
         taux_de_reponse = round((total_otps_valides / total_otps_envoyes * 100), 1) if total_otps_envoyes > 0 else 0
 
-        # ✅ Dernières consultations de CE conseiller uniquement
         derniers_otps = (
             ConsultationOTP.objects
             .filter(customer__sessions__created_by=request.user)
