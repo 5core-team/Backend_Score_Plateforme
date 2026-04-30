@@ -242,7 +242,6 @@ class ConsultationSessionSerializer(serializers.ModelSerializer):
 
 class RepaymentSerializer(serializers.ModelSerializer):
 
-    # ✅ Champs write_only visibles dans Swagger — gérés par la vue, supprimés avant save()
     session_token = serializers.CharField(
         write_only=True,
         required=True,
@@ -299,7 +298,6 @@ class DebtSerializer(serializers.ModelSerializer):
         default=None
     )
 
-    # ✅ Champs write_only visibles dans Swagger — gérés par la vue, supprimés avant save()
     session_token = serializers.CharField(
         write_only=True,
         required=True,
@@ -310,12 +308,11 @@ class DebtSerializer(serializers.ModelSerializer):
         required=True,
         help_text="UUID du client — récupéré depuis la réponse de verify-otp"
     )
-    # ✅ CORRECTION : UUID du créditeur au lieu de son ID numérique
+    # ✅ CORRECTION : creditor_uuid_field obligatoire
     creditor_uuid_field = serializers.UUIDField(
         write_only=True,
-        required=False,
-        allow_null=True,
-        help_text="UUID du client créditeur (optionnel) — retourné à la création du client"
+        required=True,
+        help_text="UUID du client créditeur — obligatoire"
     )
 
     class Meta:

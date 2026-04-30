@@ -13,11 +13,8 @@ class Customer(models.Model):
     uuid         = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     first_name   = models.CharField(max_length=100)
     last_name    = models.CharField(max_length=100)
-    # ✅ email unique — impossible d'utiliser le même email pour 2 clients ou pour un staff
     email        = models.EmailField(max_length=50, unique=True)
-    # ✅ npi unique
     npi          = models.CharField(max_length=100, unique=True, verbose_name="National Person ID")
-    # ✅ phone_number unique
     phone_number = models.CharField(max_length=20, null=True, blank=True, unique=True)
     credit_score = models.FloatField(default=0.0)
 
@@ -135,8 +132,21 @@ class Debt(models.Model):
 
     validation_token        = models.CharField(max_length=100, null=True, blank=True, unique=True)
     validation_token_expiry = models.DateTimeField(null=True, blank=True)
-    is_monitored            = models.BooleanField(default=False, verbose_name="Suivi activé")
     last_alert_sent         = models.DateField(null=True, blank=True, verbose_name="Dernière alerte envoyée")
+
+    # ✅ CORRECTION : Many-to-Many — plusieurs huissiers peuvent suivre une dette
+    monitored_by = models.ManyToManyField(
+        Huissier,
+        blank=True,
+        related_name='monitored_debts',
+        verbose_name="Suivie par"
+    )
+
+    # ✅ is_monitored devient une property calculée
+    @property
+    @extend_schema_field(OpenApiTypes.BOOL)
+    def is_monitored(self) -> bool:
+        return self.monitored_by.exists()
 
     @property
     @extend_schema_field(OpenApiTypes.BOOL)
@@ -181,14 +191,13 @@ class Repayment(models.Model):
 
     VALIDATION_STATUS_CHOICES = [
         ('pending',   'En attente de validation'),
-        ('validated', 'Validé par le client'),
-        ('rejected',  'Refusé par le client'),
+        ('validated', 'Validé par le créditeur'),
+        ('rejected',  'Refusé par le créditeur'),
     ]
 
     uuid   = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     debt   = models.ForeignKey(Debt, on_delete=models.CASCADE, related_name='repayments')
     date   = models.DateField()
-    # ✅ Montant du versement
     amount = models.DecimalField(
         max_digits=12,
         decimal_places=2,
