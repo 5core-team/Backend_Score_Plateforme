@@ -420,7 +420,7 @@ class DebtViewSet(viewsets.ModelViewSet):
         )
 
         token        = debt.generate_validation_token()
-        base_url     = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+        base_url     = getattr(settings, 'FRONTEND_URL', "https://africarisque.com")
         validate_url = f"{base_url}/debts/validate/?token={token}"
         reject_url   = f"{base_url}/debts/reject/?token={token}"
 
@@ -615,7 +615,7 @@ class DebtViewSet(viewsets.ModelViewSet):
             )
 
         token        = debt.generate_validation_token()
-        base_url     = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+        base_url     = getattr(settings, 'FRONTEND_URL', "https://africarisque.com")
         validate_url = f"{base_url}/debts/validate/?token={token}"
         reject_url   = f"{base_url}/debts/reject/?token={token}"
 
@@ -812,7 +812,7 @@ class RepaymentViewSet(viewsets.ModelViewSet):
         repayment = serializer.save(debt=debt)
 
         token        = repayment.generate_validation_token()
-        base_url     = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+        base_url     = getattr(settings, 'FRONTEND_URL', "https://africarisque.com")
         validate_url = f"{base_url}/repayments/validate/?token={token}"
         reject_url   = f"{base_url}/repayments/reject/?token={token}"
 
@@ -871,7 +871,7 @@ class RepaymentViewSet(viewsets.ModelViewSet):
             )
 
         token        = repayment.generate_validation_token()
-        base_url     = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+        base_url     = getattr(settings, 'FRONTEND_URL', "https://africarisque.com")
         validate_url = f"{base_url}/repayments/validate/?token={token}"
         reject_url   = f"{base_url}/repayments/reject/?token={token}"
 

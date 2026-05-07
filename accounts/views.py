@@ -492,7 +492,7 @@ class ChangePasswordRequestView(APIView):
         )
 
         # ✅ Envoyer l'email de confirmation
-        base_url    = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+        base_url    = getattr(settings, 'FRONTEND_URL', "https://africarisque.com")
         confirm_url = f"{base_url}/profile/confirm-password/?token={token}"
 
         send_email({

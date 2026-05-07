@@ -89,7 +89,7 @@ def send_account_setup_email(user, token: str):
     uid = urlsafe_base64_encode(force_bytes(user.pk))
 
     # URL frontend de setup (configurable dans settings.py)
-    frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:3000")
+    frontend_url = getattr(settings, "FRONTEND_URL", "https://africarisque.com")
     setup_link = f"{frontend_url}/account/setup/?uid={uid}&token={token}"
 
     subject = "Finalisation de votre compte Score"

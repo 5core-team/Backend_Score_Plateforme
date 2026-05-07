@@ -14,7 +14,7 @@ import environ
 
 env = environ.Env(
     EMAIL_HOST_PASSWORD=(str, ""),
-    FRONTEND_URL=(str, "http://localhost:3000"),
+    FRONTEND_URL=(str, "https://africarisque.com"),
     DEBUG=(bool, True),
 )
 
