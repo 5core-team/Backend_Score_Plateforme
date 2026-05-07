@@ -49,7 +49,7 @@ def send_account_setup_email(user, token: str):
     """
     uid = urlsafe_base64_encode(force_bytes(user.pk))
 
-    frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:3000")
+    frontend_url = getattr(settings, "FRONTEND_URL", "https://africarisque.com")
     setup_link   = f"{frontend_url}/account/setup/?uid={uid}&token={token}"
 
     # ✅ Message adapté au rôle — plus de "représentant pays" pour tous
