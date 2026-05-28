@@ -11,6 +11,7 @@ from .views import (
     UpdatePhotoView,
     ChangePasswordRequestView,
     ConfirmPasswordChangeView,
+    ContactFormView,
 )
 
 urlpatterns = [
@@ -36,4 +37,7 @@ urlpatterns = [
     # 🔒 Changement mot de passe via confirmation email
     path('profile/change-password/',  ChangePasswordRequestView.as_view(),      name='profile-change-password'),
     path('profile/confirm-password/', ConfirmPasswordChangeView.as_view(),      name='profile-confirm-password'),
+
+    # 📬 Formulaire de contact public
+    path('contact/',                  ContactFormView.as_view(),                name='contact'),
 ]

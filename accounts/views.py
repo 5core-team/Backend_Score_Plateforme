@@ -27,6 +27,7 @@ from .serializers import (
     UpdatePhotoSerializer,
     ChangePasswordRequestSerializer,
     ErrorSerializer,
+    ContactFormSerializer,
 )
 from accounts.utils import send_email
 
@@ -476,13 +477,10 @@ class ChangePasswordRequestView(APIView):
         user         = request.user
         new_password = serializer.validated_data['new_password']
 
-        # ✅ Hasher le nouveau mot de passe avant de le stocker
         new_password_hash = make_password(new_password)
 
-        # ✅ Supprimer les anciennes demandes non confirmées
         PasswordChangeRequest.objects.filter(user=user, is_used=False).delete()
 
-        # ✅ Créer la demande avec un token unique
         token = secrets.token_urlsafe(32)
         PasswordChangeRequest.objects.create(
             user              = user,
@@ -491,7 +489,6 @@ class ChangePasswordRequestView(APIView):
             expiry_date       = timezone.now() + timedelta(minutes=30),
         )
 
-        # ✅ Envoyer l'email de confirmation
         base_url    = getattr(settings, 'FRONTEND_URL', "https://africarisque.com")
         confirm_url = f"{base_url}/profile/confirm-password/?token={token}"
 
@@ -567,17 +564,87 @@ class ConfirmPasswordChangeView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # ✅ Appliquer le nouveau mot de passe hashé
         user          = change_request.user
         user.password = change_request.new_password_hash
         user.password_changed = True
         user.save(update_fields=['password', 'password_changed'])
 
-        # ✅ Marquer la demande comme utilisée
         change_request.is_used = True
         change_request.save(update_fields=['is_used'])
 
         return Response(
             {"message": "Mot de passe changé avec succès. Vous pouvez vous reconnecter."},
             status=status.HTTP_200_OK
+        )
+
+
+# ─────────────────────────────────────────────
+# FORMULAIRE DE CONTACT — Route publique
+# ─────────────────────────────────────────────
+
+@method_decorator(csrf_exempt, name='dispatch')
+class ContactFormView(APIView):
+    """
+    Route publique — accessible sans authentification.
+    Reçoit les données du formulaire de contact et les envoie
+    par email à l'adresse de gestion de la plateforme.
+    """
+
+    @extend_schema(
+        tags=["Contact"],
+        summary="Formulaire de prise de contact",
+        description=(
+            "Envoie les informations du formulaire de contact par email "
+            "à l'équipe qui gère la plateforme. "
+            "Accessible publiquement, sans authentification."
+        ),
+        request=ContactFormSerializer,
+        responses={
+            200: OpenApiResponse(description="Email envoyé avec succès."),
+            400: OpenApiResponse(description="Données invalides."),
+            500: OpenApiResponse(description="Erreur lors de l'envoi de l'email."),
+        },
+    )
+    def post(self, request: Request):
+        serializer = ContactFormSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+
+        subject = f"[Score – Prise de contact] {data['organisation_name']}"
+        message = (
+            f"Nouvelle demande de contact reçue via la plateforme Score.\n\n"
+            f"─────────────────────────────────────\n"
+            f"  INFORMATIONS DE L'ORGANISATION\n"
+            f"─────────────────────────────────────\n\n"
+            f"  Nom de l'organisation : {data['organisation_name']}\n"
+            f"  Email professionnel   : {data['email']}\n"
+            f"  Téléphone             : {data['phone']}\n"
+            f"  Type d'organisation   : {data['organisation_type']}\n"
+            f"  Pays                  : {data['country']}\n\n"
+            f"─────────────────────────────────────\n"
+            f"  OBJET DE LA DEMANDE\n"
+            f"─────────────────────────────────────\n\n"
+            f"{data['message']}\n\n"
+            f"─────────────────────────────────────\n"
+            f"Ce message a été envoyé automatiquement depuis le formulaire\n"
+            f"de contact de la plateforme Score (africarisque.com)."
+        )
+
+        try:
+            send_email({
+                "subject": subject,
+                "message": message,
+                "to":      settings.EMAIL_HOST_USER,
+            })
+        except Exception:
+            return Response(
+                {"error": "L'email n'a pas pu être envoyé. Veuillez réessayer plus tard."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response(
+            {"detail": "Votre message a bien été envoyé. Nous vous répondrons dans les plus brefs délais."},
+            status=status.HTTP_200_OK,
         )
