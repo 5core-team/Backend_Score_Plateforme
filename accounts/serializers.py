@@ -50,7 +50,6 @@ class UpdatePhotoSerializer(serializers.ModelSerializer):
         fields = ["photo"]
 
     def validate_photo(self, value):
-        # ✅ Vérifier que c'est bien une image
         if value:
             allowed = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp']
             if hasattr(value, 'content_type') and value.content_type not in allowed:
@@ -114,3 +113,41 @@ class LoginResponseSerializer(serializers.Serializer):
 
 class ErrorSerializer(serializers.Serializer):
     error = serializers.CharField(help_text="Message d'erreur")
+
+
+# ─────────────────────────────────────────────
+# FORMULAIRE DE CONTACT
+# ─────────────────────────────────────────────
+
+ORGANISATION_TYPE_CHOICES = [
+    ('banque',         'Banque'),
+    ('microfinance',   'Microfinance'),
+    ('assurance',      'Assurance'),
+    ('entreprise',     'Entreprise'),
+    ('administration', 'Administration'),
+    ('autre',          'Autre'),
+]
+
+class ContactFormSerializer(serializers.Serializer):
+    organisation_name = serializers.CharField(
+        max_length=255,
+        error_messages={'blank': "Le nom de l'organisation est requis."}
+    )
+    email = serializers.EmailField(
+        error_messages={'invalid': "Veuillez saisir une adresse email valide."}
+    )
+    phone = serializers.CharField(
+        max_length=30,
+        error_messages={'blank': "Le numéro de téléphone est requis."}
+    )
+    organisation_type = serializers.ChoiceField(
+        choices=ORGANISATION_TYPE_CHOICES,
+        error_messages={'invalid_choice': "Type d'organisation invalide."}
+    )
+    country = serializers.CharField(
+        max_length=100,
+        error_messages={'blank': "Le pays est requis."}
+    )
+    message = serializers.CharField(
+        error_messages={'blank': "L'objet de la demande est requis."}
+    )
